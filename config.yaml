@@ -1,0 +1,20 @@
+base:
+  database:
+    host: 128.110.25.99
+    port: 5432
+    database: accountdb
+  
+  redis:
+    host: 128.110.25.99
+    port: 6379
+    db: 0
+
+  grpc:
+    host: 128.110.25.99
+    port: 50051
+
+  order_observer:
+    path: D:\XQ
+    order_file: Order.txt
+    trade_file: Deal.txt
+    position_file: Position.txt

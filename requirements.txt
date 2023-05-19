@@ -1,8 +1,7 @@
 psycopg2-binary
-grpcio==1.54.2
-grpcio-tools==1.54.2
-redis==4.5.5
-fastapi==0.95.2
 pyyaml==6.0
 python-dotenv==1.0.0
 watchdog==3.0.0
+loguru==0.7.0
+pandas==2.0.1
+pydantic==1.10.7

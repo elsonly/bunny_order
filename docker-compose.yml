@@ -1,0 +1,24 @@
+version: '3.7'
+
+services:
+  bunny_order:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bunny_order:latest
+    command: python -m bunny_order
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        tag: "{{.Name}}"
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - "C:/proprietary:/opt/signals"
+    networks:
+      - bunny-net
+
+networks:
+  bunny-net:
+    external: true

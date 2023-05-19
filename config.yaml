@@ -1,20 +1,34 @@
-base:
+base: &base
   database:
     host: 128.110.25.99
     port: 5432
     database: accountdb
+
+  observer:
+    base_path: ./signals
+    sf31_orders_dir: sf31_orders
+    xq_signals_dir: xq_signals
+    order_callback_dir: order_callback
+    order_callback_file: Order.txt
+    trade_callback_file: Deal.txt
+    position_callback_file: Position.txt
   
-  redis:
-    host: 128.110.25.99
-    port: 6379
-    db: 0
+  loguru:
+    sink_dir: ./log
+    sink_file: bunny_order.log
 
-  grpc:
-    host: 128.110.25.99
-    port: 50051
 
-  order_observer:
-    path: D:\XQ
-    order_file: Order.txt
-    trade_file: Deal.txt
-    position_file: Position.txt
+local: &local
+  <<: *base
+
+
+prod: &prod
+  <<: *base
+  observer:
+    base_path: /opt/signals
+    sf31_orders_dir: sf31_orders
+    xq_signals_dir: XQ_output
+    order_callback_dir: status
+    order_callback_file: Order.txt
+    trade_callback_file: Deal.txt
+    position_callback_file: Position.txt

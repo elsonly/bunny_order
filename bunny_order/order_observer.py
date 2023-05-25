@@ -158,7 +158,9 @@ class XQSignalEventHandler(FileEventHandler):
         if match is None:
             return "", ""
         parsed_path = match.group(1).replace(".log", "")
-        date_, strategy = parsed_path.split("_")
+        split_data = parsed_path.split("_")
+        date_ = split_data[0]
+        strategy = "_".join(split_data[1:])
         return date_, strategy
 
     def convert_to_signals(

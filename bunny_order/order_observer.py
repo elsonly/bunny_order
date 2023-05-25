@@ -176,12 +176,16 @@ class XQSignalEventHandler(FileEventHandler):
             if len(x) < 6:
                 logger.debug(f"invalid data: {x}")
                 continue
+            n_hour = len(x[0])
+            stime = dt.time(
+                hour=int(x[0][: n_hour - 4]),
+                minute=int(x[0][n_hour - 4 : n_hour - 2]),
+                second=int(x[0][n_hour - 2 : n_hour]),
+            )
             signal = XQSignal(
                 id=self.get_signal_id(),
                 sdate=pd.to_datetime(date).date(),
-                stime=dt.time(
-                    hour=int(x[0][:2]), minute=int(x[0][2:4]), second=int(x[0][4:6])
-                ),
+                stime=stime,
                 strategy_id=self.strategies[strategy].id,
                 security_type=SF31SecurityType.Stock,
                 code=x[1].split(".")[0],
@@ -304,6 +308,12 @@ class OrderCallbackEventHandler(FileEventHandler):
                 ]
         """
         for raw_order in data:
+            n_hour = len(raw_order[3])
+            order_time = dt.time(
+                hour=int(raw_order[3][: n_hour - 4]),
+                minute=int(raw_order[3][n_hour - 4 : n_hour - 2]),
+                second=int(raw_order[3][n_hour - 2 : n_hour]),
+            )
             order = Order(
                 trader_id=raw_order[0],
                 strategy=7,  # temp strategy id
@@ -312,11 +322,7 @@ class OrderCallbackEventHandler(FileEventHandler):
                 if raw_order[2] == "現股"
                 else SecurityType.Futures,
                 order_date=get_tpe_datetime().date(),
-                order_time=dt.time(
-                    int(raw_order[3][:2]),
-                    int(raw_order[3][2:4]),
-                    int(raw_order[3][4:6]),
-                ),
+                order_time=order_time,
                 code=raw_order[4],
                 action=Action.Buy if raw_order[6] == "Buy" else Action.Sell,
                 order_price=raw_order[8],
@@ -336,6 +342,12 @@ class OrderCallbackEventHandler(FileEventHandler):
                 ]
         """
         for raw_trade in data:
+            n_hour = len(raw_trade[3])
+            trade_time = dt.time(
+                hour=int(raw_trade[3][: n_hour - 4]),
+                minute=int(raw_trade[3][n_hour - 4 : n_hour - 2]),
+                second=int(raw_trade[3][n_hour - 2 : n_hour]),
+            )
             trade = Trade(
                 trader_id=raw_trade[0],
                 strategy=7,  # temp strategy id
@@ -344,11 +356,7 @@ class OrderCallbackEventHandler(FileEventHandler):
                 if raw_trade[2] == "現股"
                 else SecurityType.Futures,
                 trade_date=get_tpe_datetime().date(),
-                trade_time=dt.time(
-                    int(raw_trade[3][:2]),
-                    int(raw_trade[3][2:4]),
-                    int(raw_trade[3][4:6]),
-                ),
+                trade_time=trade_time,
                 code=raw_trade[4],
                 order_type=OrderType(raw_trade[5]),
                 action=Action.Buy if raw_trade[6] == "Buy" else Action.Sell,

@@ -24,7 +24,6 @@ from bunny_order.utils import logger, get_tpe_datetime, event_wrapper
 from bunny_order.models import (
     Strategy,
     SF31Order,
-    SF31SecurityType,
     OrderType,
     Action,
     Order,
@@ -66,7 +65,7 @@ class FileEventHandler(FileSystemEventHandler):
 
 
 class OrderEventHandler(FileEventHandler):
-    def __init__(self, strategies: Dict[str, Strategy], listen_path: str):
+    def __init__(self, strategies: Dict[int, Strategy], listen_path: str):
         super().__init__()
         self.strategies = strategies
         self.listen_path = listen_path
@@ -93,6 +92,8 @@ class OrderEventHandler(FileEventHandler):
                 data = [x.strip().split(",") for x in f.readlines()]
 
             action, strategy = self.parse_path(src_path)
+            if self.checkpoints[strategy][action] == len(data):
+                return
             self.on_sf31_orders(strategy, data)
             self.checkpoints[strategy][action] = len(data)
             self.dump_checkpoints()
@@ -134,25 +135,39 @@ class OrderEventHandler(FileEventHandler):
             with open(self.checkpoints_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             self.checkpoints.update(data)
-    
+
     def get_order_id(self):
         return uuid.uuid4().hex[:5]
 
+    def get_seqno(self):
+        return uuid.uuid4().hex[:12]
+
+    def get_strategy_id(self, strategy_name: str) -> int:
+        for _id, strategy in self.strategies.items():
+            if strategy_name == strategy.name:
+                return strategy.id
+        return 0
+    
     def on_sf31_orders(self, strategy: str, data: List[str]):
         """
         data (list):
             ex: ['A15,Stock,1684852278.968826,2882,ROD,B,10,47.65']
         """
-        if strategy not in self.strategies:
+        strategy_id = self.get_strategy_id(strategy)
+        if strategy_id == 0:
             return
         for raw_order in data:
+            if raw_order[1] == "Stock":
+                security_type = SecurityType.Stock
+            else:
+                raise Exception(f"unhandled security type: {raw_order[1]}")
             dt_ = dt.datetime.fromtimestamp(float(raw_order[2]))
             order = SF31Order(
                 signal_id=raw_order[0],
                 sfdate=dt_.date(),
                 sftime=dt_.time(),
-                strategy_id=self.strategies[strategy].id,
-                security_type=SF31SecurityType(raw_order[1]),
+                strategy_id=strategy_id,
+                security_type=security_type,
                 code=raw_order[3],
                 order_type=OrderType(raw_order[4]),
                 action=Action(raw_order[5]),
@@ -163,42 +178,59 @@ class OrderEventHandler(FileEventHandler):
             self.to_order(order_id, order)
             self.to_trade(order_id, order)
 
-    def to_order(self, order_id:str, order: SF31Order):
+    def to_order(self, order_id: str, order: SF31Order):
         """
-        025,00000,現股,085004,8426,ROD,Buy,1,63.4,特定證券管制交易－類別錯誤
+        025,00000,現股,085004,8426,ROD,Buy,1,63.4,特定證券管制交易－類別錯誤,2023/05/26
         """
-        if order.security_type == SF31SecurityType.Stock:
-            security_type = "現股" 
+        logger.info(order)
+        if order.security_type == SecurityType.Stock:
+            security_type = "現股"
         else:
             raise Exception(f"Unhandle Secutiry Type: {order.security_type}")
-        
+
         if order.action == Action.Buy:
             action = "Buy"
         else:
             action = "Sell"
-        
-        with open(f"{self.order_callback_path}\{Config.OBSERVER_ORDER_CALLBACK_FILE}", "a", encoding="utf8") as f:
+
+        with open(
+            f"{self.order_callback_path}\{Config.OBSERVER_ORDER_CALLBACK_FILE}",
+            "a",
+            encoding="utf8",
+        ) as f:
             f.write(
-                f"025,{order_id},{security_type},{order.sftime.strftime('%H%M%S')},{order.code},{order.order_type},{action},{order.quantity},{order.price},\n"
+                (
+                    f"025,{order_id},{security_type},{order.sftime.strftime('%H%M%S')},{order.code},"
+                    f"{order.order_type},{action},{order.quantity},{order.price},,{order.sfdate.strftime('%Y/%m/%d')}\n"
+                )
             )
 
-    def to_trade(self, order_id:str, order: SF31Order):
+    def to_trade(self, order_id: str, order: SF31Order):
         """
-        025,W003U,現股,090009,8446,ROD,Buy,1,115,
+        025,W003U,現股,090009,8446,ROD,Buy,1,115,,2023/05/26,100000038840
         """
-        if order.security_type == SF31SecurityType.Stock:
-            security_type = "現股" 
+        logger.info(order)
+        if order.security_type == SecurityType.Stock:
+            security_type = "現股"
         else:
             raise Exception(f"Unhandle Secutiry Type: {order.security_type}")
-        
+
         if order.action == Action.Buy:
             action = "Buy"
         else:
             action = "Sell"
-        
-        with open(f"{self.order_callback_path}\{Config.OBSERVER_TRADE_CALLBACK_FILE}", "a", encoding="utf8") as f:
+
+        with open(
+            f"{self.order_callback_path}\{Config.OBSERVER_TRADE_CALLBACK_FILE}",
+            "a",
+            encoding="utf8",
+        ) as f:
             f.write(
-                f"025,{order_id},{security_type},{order.sftime.strftime('%H%M%S')},{order.code},{order.order_type},{action},{order.quantity},{order.price},\n"
+                (
+                    f"025,{order_id},{security_type},{order.sftime.strftime('%H%M%S')},{order.code},"
+                    f"{order.order_type},{action},{order.quantity},{order.price},"
+                    f",{order.sfdate.strftime('%Y/%m/%d')},{self.get_seqno()}\n"
+                )
             )
 
 
@@ -207,7 +239,7 @@ class OrderManager:
         self,
     ):
         self.dm = DataManager()
-        self.strategies: Dict[str, Strategy] = self.dm.get_strategies()
+        self.strategies: Dict[int, Strategy] = self.dm.get_strategies()
         self.observer = Observer()
         self.observer.setDaemon(True)
         if not os.path.exists(Config.OBSERVER_BASE_PATH):

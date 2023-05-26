@@ -6,11 +6,14 @@ from decimal import Decimal
 
 from bunny_order.models import (
     Strategy,
-    XQSignal,
+    Signal,
     SF31Order,
     Order,
     Trade,
+    SF31Position,
     Position,
+    QuoteSnapshot,
+    Contract,
 )
 from bunny_order.database.tsdb_client import TSDBClient
 from bunny_order.config import Config
@@ -191,22 +194,18 @@ class DataManager:
         elif isinstance(result, str) and "Error" in result:
             raise Exception(f"save {table} | failed", result)
 
-    def get_strategies(self) -> Dict[str, Strategy]:
+    def get_strategies(self) -> Dict[int, Strategy]:
         data = self.cli.execute_query("select * from dealer.strategy", "dict")
-        return {x["name"]: Strategy(**x) for x in data}
+        return {x["id"]: Strategy(**x) for x in data}
 
-    def save_xq_signal(self, signal: XQSignal):
+    def save_signal(self, signal: Signal):
         self.save_one(
-            table="dealer.xq_signals",
+            table="dealer.signals",
             data=signal.dict(),
             method="if_not_exists",
             conditions={
+                "id": signal.id,
                 "sdate": signal.sdate,
-                "stime": signal.stime,
-                "strategy_id": signal.strategy_id,
-                "code": signal.code,
-                "price": signal.price,
-                "quantity": signal.quantity,
             },
         )
 
@@ -243,33 +242,82 @@ class DataManager:
         )
 
     def save_order(self, order: Order):
-        self.save_one(
-            table="dealer.orders_tmp",
-            data=order.dict(),
-            method="direct"
-            # method="if_not_exists",
-            # conditions={
-            #     "order_date": order.order_date,
-            #     "order_id": order.order_id,
-            # },
-        )
+        if order.order_id == "00000":
+            self.save_one(table="dealer.orders_tmp", data=order.dict(), method="direct")
+        else:
+            self.save_one(
+                table="dealer.orders_tmp",
+                data=order.dict(),
+                method="if_not_exists",
+                conditions={
+                    "order_date": order.order_date,
+                    "order_id": order.order_id,
+                },
+            )
 
     def save_trade(self, trade: Trade):
         self.save_one(
             table="dealer.trades_tmp",
             data=trade.dict(),
-            method="direct"
-            # method="if_not_exists",
-            # conditions={
-            #     "order_id": trade.order_id,
-            #     "trade_date": trade.trade_date,
-            #     "trade_time": trade.trade_time,
-            #     "strategy": trade.strategy,
-            #     "code": trade.code,
-            #     "price": trade.price,
-            #     "qty": trade.qty,
-            # },
+            method="if_not_exists",
+            conditions={
+                "order_id": trade.order_id,
+                "trade_date": trade.trade_date,
+                "seqno": trade.seqno,
+            },
         )
 
-    def save_positions(self, position: List[Position]):
-        pass
+    def save_positions(self, positions: List[SF31Position]):
+        df = pd.DataFrame([pos.dict() for pos in positions])
+        self.save(
+            table="dealer.sf31_positions",
+            df=df,
+            method="upsert",
+            conflict_cols=["code"],
+        )
+
+    def get_positions(self) -> Dict[int, Dict[str, Position]]:
+        data = self.cli.execute_query(
+            """select 
+                strategy, code, action, qty, 
+                cost_amt, avg_prc, first_entry_date
+            from dealer.ft_get_positions_fifo(CURRENT_DATE, 'B')
+            """,
+            "dict",
+        )
+        d = {}
+        for row in data:
+            if row["strategy"] not in d:
+                d[row["strategy"]] = {}
+            d[row["strategy"]][row["code"]] = Position(**row)
+        return d
+
+    def get_quote_snapshots(self, codes: List[str]) -> Dict[str, QuoteSnapshot]:
+        cond = self.convert_condition_to_sql_string({"code": codes})
+        data = self.cli.execute_query(
+            f"""select 
+                dt, code, open, high, low, close, volume,
+                total_volume, amount, total_amount, buy_price,
+                buy_volume, sell_price, sell_volume 
+            from public.quote_snapshots
+            where {cond}
+            """,
+            "dict",
+        )
+        d = {}
+        for row in data:
+            d[row["code"]] = QuoteSnapshot(**row)
+        return d
+
+    def get_contracts(self) -> None:
+        data = self.cli.execute_query(
+            f"""select code, name, reference, limit_up, limit_down
+            from sino.contracts 
+            where length(code) = 4 and security_type='STK';
+            """,
+            "dict",
+        )
+        d = {}
+        for row in data:
+            d[row["code"]] = Contract(**row)
+        return d

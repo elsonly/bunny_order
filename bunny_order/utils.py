@@ -1,12 +1,10 @@
 import os
 from loguru import logger
 from datetime import datetime, timedelta
-from typing import List
 from functools import wraps
-import time
+from decimal import Decimal, ROUND_HALF_UP
 
 from bunny_order.config import Config
-from bunny_order.models import SF31Order
 
 
 if not os.path.exists(Config.LOGURU_SINK_DIR):
@@ -38,59 +36,38 @@ def event_wrapper(func):
     return inner
 
 
-def send_sf31_orders(orders: List[SF31Order]):
-    """
-    N12,Stock,1684143670.093469,2882,ROD,B,1,43.10
-    """
-    pass
-
-
-def _add_spread(price, count):
-    _price = price
-    for i in range(abs(count)):
-        if count > 0:
-            _price += _spread(_price, 1)
-        elif count < 0:
-            _price -= _spread(_price, -1)
-    return _price
-
-
-def _spread(price, up_or_down):
-    if up_or_down == 1:
-        if price < 10:
-            return 0.01
-        elif price >= 10 and price < 50:
-            return 0.05
-        elif price >= 50 and price < 100:
-            return 0.1
-        elif price >= 100 and price < 500:
-            return 0.5
-        elif price >= 500 and price < 1000:
-            return 1
-        elif price >= 1000:
-            return 5
-
-    elif up_or_down == -1:
-        if price <= 10:
-            return 0.01
-        elif price > 10 and price <= 50:
-            return 0.05
-        elif price > 50 and price <= 100:
-            return 0.1
-        elif price > 100 and price <= 500:
-            return 0.5
-        elif price > 500 and price <= 1000:
-            return 1
-        elif price > 1000:
-            return 5
-
-
-def _spread_cnt(lower_price, upper_price):
-    _price = lower_price
-    if lower_price == upper_price:
-        return 0
+def adjust_price_for_tick_unit(price: Decimal) -> Decimal:
+    if price < 0:
+        raise Exception(f"Invalid price: {price}")
+    elif price < 10:
+        tick_unit = Decimal("0.01")
+    elif price < 50:
+        tick_unit = Decimal("0.05")
+    elif price < 100:
+        tick_unit = Decimal("0.1")
+    elif price < 500:
+        tick_unit = Decimal("0.5")
+    elif price < 1000:
+        tick_unit = Decimal("1")
     else:
-        for i in range(5000):
-            _price += _spread(_price, 1)
-            if _price > upper_price:
-                return i - 1
+        tick_unit = Decimal("5")
+
+    adj_price = (
+        (price / tick_unit).quantize(Decimal("1."), ROUND_HALF_UP) * tick_unit
+    ).quantize(Decimal(".00"), ROUND_HALF_UP)
+    return adj_price
+
+
+SIGNAL_COUNTER = 0
+
+
+def get_signal_id() -> str:
+    """
+    return (str): signal id
+        ex: '001', '999'
+    """
+    global SIGNAL_COUNTER
+    SIGNAL_COUNTER += 1
+    SIGNAL_COUNTER = SIGNAL_COUNTER % 1000
+    signal_id = f"{str(SIGNAL_COUNTER).rjust(3, '0')}"
+    return signal_id

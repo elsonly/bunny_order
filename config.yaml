@@ -12,6 +12,13 @@ base: &base
     order_callback_file: Order.txt
     trade_callback_file: Deal.txt
     position_callback_file: Position.txt
+
+  engine:
+    trade_start_time: "083000"
+    trade_end_time: "143000"
+
+  order_manager:
+    daily_amount_limit: 10000000
   
   loguru:
     sink_dir: ./log

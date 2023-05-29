@@ -16,9 +16,13 @@ services:
         max-file: "3"
     volumes:
       - "C:/proprietary:/opt/signals"
+      - bunny_order-cache:/opt/bunny_order/checkpoints
     networks:
       - bunny-net
 
 networks:
   bunny-net:
     external: true
+
+volumes:
+  bunny_order-cache: 

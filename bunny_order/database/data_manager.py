@@ -20,7 +20,7 @@ from bunny_order.config import Config
 
 
 class DataManager:
-    def __init__(self, verbose: bool = True):
+    def __init__(self, verbose: bool = False):
         self.cli = TSDBClient(
             host=Config.DB_HOST,
             port=Config.DB_PORT,

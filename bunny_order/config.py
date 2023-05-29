@@ -40,9 +40,10 @@ class BaseConfig:
         second=int(config_yaml["engine"]["trade_end_time"][4:6]),
     )
     OM_DAILY_AMOUNT_LIMIT = config_yaml["order_manager"]["daily_amount_limit"]
-
     LOGURU_SINK_DIR = config_yaml["loguru"]["sink_dir"]
     LOGURU_SINK_FILE = config_yaml["loguru"]["sink_file"]
+    LOGURU_LOG_LEVEL = config_yaml["loguru"]["level"]
+    CHECKPOINTS_DIR = config_yaml["common"]["checkpoints_dir"]
 
 
 Config = BaseConfig()

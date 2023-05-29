@@ -16,7 +16,14 @@ import datetime as dt
 
 
 from bunny_order.config import Config
-from bunny_order.utils import logger, get_tpe_datetime, event_wrapper, get_signal_id
+from bunny_order.utils import (
+    logger,
+    get_tpe_datetime,
+    event_wrapper,
+    get_signal_id,
+    dump_checkpoints,
+    load_checkpoints,
+)
 from bunny_order.models import (
     Signal,
     Strategy,
@@ -76,9 +83,9 @@ class XQSignalEventHandler(FileEventHandler):
         self.pattern = re.compile(r"(\d{8}_[^\\/]+\.log)$")
         self.checkpoints: DefaultDict[str, int] = defaultdict(int)
         self.checkpoints_path = (
-            f"{Config.OBSERVER_BASE_PATH}/{Config.OBSERVER_XQ_SIGNALS_DIR}.json"
+            f"{Config.CHECKPOINTS_DIR}/{Config.OBSERVER_XQ_SIGNALS_DIR}.json"
         )
-        self.load_checkpoints()
+        self.checkpoints.update(load_checkpoints(self.checkpoints_path))
 
     @event_wrapper
     def on_created(self, event: FileCreatedEvent):
@@ -94,7 +101,7 @@ class XQSignalEventHandler(FileEventHandler):
 
             self.on_signals(date_, strategy, data)
             self.checkpoints[strategy] = len(data)
-            self.dump_checkpoints()
+            dump_checkpoints(self.checkpoints_path, self.checkpoints)
 
     @event_wrapper
     def on_modified(self, event: FileModifiedEvent):
@@ -111,21 +118,11 @@ class XQSignalEventHandler(FileEventHandler):
             if self.checkpoints[strategy] < len(data):
                 self.on_signals(date_, strategy, data[self.checkpoints[strategy] :])
                 self.checkpoints[strategy] = len(data)
-                self.dump_checkpoints()
-
-    def dump_checkpoints(self):
-        with open(self.checkpoints_path, "w", encoding="utf8") as f:
-            json.dump(self.checkpoints, f, indent=4, ensure_ascii=False)
-
-    def load_checkpoints(self):
-        if os.path.exists(self.checkpoints_path):
-            with open(self.checkpoints_path, "r", encoding="utf8") as f:
-                data = json.load(f)
-            self.checkpoints.update(data)
+                dump_checkpoints(self.checkpoints_path, self.checkpoints)
 
     def reset_checkpoints(self):
         self.checkpoints.clear()
-        self.dump_checkpoints()
+        dump_checkpoints(self.checkpoints_path, self.checkpoints)
 
     def parse_file(self, src_path: str) -> Tuple[str, str]:
         """
@@ -193,11 +190,11 @@ class XQSignalEventHandler(FileEventHandler):
         data (list):
             ex: ["173749 2882.TW ROD B 20 47.65"]
         """
-        logger.debug(f"date: {date}, strategy: {strategy}, data: {data}")
+        logger.info(f"date: {date}, strategy: {strategy}, data: {data}")
         if self.get_strategy_id(strategy) == 0:
             return
         signals = self.convert_to_signals(date, strategy, data)
-        logger.debug(f"signals: {signals}")
+        logger.info(f"signals: {signals}")
         for signal in signals:
             self.q_out.append((Event.Signal, signal))
 
@@ -211,9 +208,9 @@ class OrderCallbackEventHandler(FileEventHandler):
         self.q_out = q_out
         self.checkpoints: DefaultDict[str, int] = defaultdict(int)
         self.checkpoints_path = (
-            f"{Config.OBSERVER_BASE_PATH}/{Config.OBSERVER_ORDER_CALLBACK_DIR}.json"
+            f"{Config.CHECKPOINTS_DIR}/{Config.OBSERVER_ORDER_CALLBACK_DIR}.json"
         )
-        self.load_checkpoints()
+        self.checkpoints.update(load_checkpoints(self.checkpoints_path))
 
     @event_wrapper
     def on_created(self, event: FileCreatedEvent):
@@ -228,24 +225,27 @@ class OrderCallbackEventHandler(FileEventHandler):
             if event.src_path.endswith(Config.OBSERVER_ORDER_CALLBACK_FILE):
                 self.on_orders(data)
                 self.checkpoints["orders"] = len(data)
-                self.dump_checkpoints()
+                dump_checkpoints(self.checkpoints_path, self.checkpoints)
 
             elif event.src_path.endswith(Config.OBSERVER_TRADE_CALLBACK_FILE):
                 self.on_trades(data)
                 self.checkpoints["trades"] = len(data)
-                self.dump_checkpoints()
+                dump_checkpoints(self.checkpoints_path, self.checkpoints)
 
             elif event.src_path.endswith(Config.OBSERVER_POSITION_CALLBACK_FILE):
                 self.on_positions(data)
                 self.checkpoints["positions"] = len(data)
-                self.dump_checkpoints()
+                dump_checkpoints(self.checkpoints_path, self.checkpoints)
 
     @event_wrapper
     def on_modified(self, event: FileModifiedEvent):
         if event.is_directory:
             logger.info("directory modified:{0}".format(event.src_path))
         else:
-            logger.info("file modified:{0}".format(event.src_path))
+            if event.src_path.endswith(Config.OBSERVER_POSITION_CALLBACK_FILE):
+                logger.debug("file modified:{0}".format(event.src_path))
+            else:
+                logger.info("file modified:{0}".format(event.src_path))
 
             with open(event.src_path, "r", encoding="utf-8") as f:
                 data = [x.strip().split(",") for x in f.readlines()]
@@ -254,40 +254,30 @@ class OrderCallbackEventHandler(FileEventHandler):
                 if self.checkpoints["orders"] < len(data):
                     self.on_orders(data[self.checkpoints["orders"] :])
                     self.checkpoints["orders"] = len(data)
-                    self.dump_checkpoints()
+                    dump_checkpoints(self.checkpoints_path, self.checkpoints)
 
             elif event.src_path.endswith(Config.OBSERVER_TRADE_CALLBACK_FILE):
                 if self.checkpoints["trades"] < len(data):
                     self.on_trades(data[self.checkpoints["trades"] :])
                     self.checkpoints["trades"] = len(data)
-                    self.dump_checkpoints()
+                    dump_checkpoints(self.checkpoints_path, self.checkpoints)
 
             elif event.src_path.endswith(Config.OBSERVER_POSITION_CALLBACK_FILE):
                 if self.checkpoints["positions"] < len(data):
                     self.on_positions(data[self.checkpoints["positions"] :])
                     self.checkpoints["positions"] = len(data)
-                    self.dump_checkpoints()
+                    dump_checkpoints(self.checkpoints_path, self.checkpoints)
 
                 # reset positions
                 if self.checkpoints["positions"] > 2000:
                     with open(event.src_path, "r+") as f:
                         _ = f.truncate(0)
                     self.checkpoints["positions"] = 0
-                    self.dump_checkpoints()
-
-    def dump_checkpoints(self):
-        with open(self.checkpoints_path, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.checkpoints, indent=4))
-
-    def load_checkpoints(self):
-        if os.path.exists(self.checkpoints_path):
-            with open(self.checkpoints_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            self.checkpoints.update(data)
+                    dump_checkpoints(self.checkpoints_path, self.checkpoints)
 
     def reset_checkpoints(self):
         self.checkpoints.clear()
-        self.dump_checkpoints()
+        dump_checkpoints(self.checkpoints_path, self.checkpoints)
 
     def on_orders(self, data: List[str]):
         """

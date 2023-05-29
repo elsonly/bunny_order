@@ -76,7 +76,7 @@ class OrderEventHandler(FileEventHandler):
             lambda: defaultdict(int)
         )
         self.checkpoints_path = (
-            f"{Config.OBSERVER_BASE_PATH}/{Config.OBSERVER_SF31_ORDERS_DIR}.json"
+            f"{Config.CHECKPOINTS_DIR}/{Config.OBSERVER_SF31_ORDERS_DIR}.json"
         )
         self.load_checkpoints()
 

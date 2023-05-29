@@ -1,8 +1,10 @@
 import os
+import sys
 from loguru import logger
 from datetime import datetime, timedelta
 from functools import wraps
 from decimal import Decimal, ROUND_HALF_UP
+import json
 
 from bunny_order.config import Config
 
@@ -10,13 +12,15 @@ from bunny_order.config import Config
 if not os.path.exists(Config.LOGURU_SINK_DIR):
     os.mkdir(Config.LOGURU_SINK_DIR)
 
+logger.remove()
+logger.add(sys.stdout, level=Config.LOGURU_LOG_LEVEL)
 logger.add(
     f"{Config.LOGURU_SINK_DIR}/{Config.LOGURU_SINK_FILE}",
     rotation="100MB",
     encoding="utf-8",
     enqueue=True,
     retention="30 days",
-    level="INFO",
+    level=Config.LOGURU_LOG_LEVEL,
 )
 
 
@@ -71,3 +75,16 @@ def get_signal_id() -> str:
     SIGNAL_COUNTER = SIGNAL_COUNTER % 1000
     signal_id = f"{str(SIGNAL_COUNTER).rjust(3, '0')}"
     return signal_id
+
+
+def dump_checkpoints(path: str, data: dict) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(json.dumps(data, indent=4, ensure_ascii=False))
+
+
+def load_checkpoints(path: str) -> dict:
+    data = {}
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    return data

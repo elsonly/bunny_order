@@ -2,6 +2,7 @@ Pipfile
 Pipfile.*
 log
 signals
+checkpoints
 
 .vscode
 # Byte-compiled / optimized / DLL files

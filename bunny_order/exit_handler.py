@@ -1,4 +1,4 @@
-from typing import Dict, Deque, DefaultDict, Tuple
+from typing import Dict, Deque, DefaultDict, Tuple, List
 import datetime as dt
 import pandas as pd
 from collections import defaultdict, deque
@@ -19,7 +19,14 @@ from bunny_order.models import (
     SignalSource,
     Event,
 )
-from bunny_order.utils import get_tpe_datetime, get_signal_id, logger
+from bunny_order.utils import (
+    get_tpe_datetime,
+    get_signal_id,
+    logger,
+    dump_checkpoints,
+    load_checkpoints,
+)
+from bunny_order.config import Config
 
 
 class ExitHandler:
@@ -38,7 +45,9 @@ class ExitHandler:
         self.strategies = strategies
         self.positions = positions
         self.contracts = contracts
-        self.running_signals: DefaultDict[int, Dict[str, Signal]] = defaultdict(dict)
+        self.running_signals: DefaultDict[int, List[str]] = defaultdict(list)
+        self.checkpoints_path = f"{Config.CHECKPOINTS_DIR}/exit_handler.json"
+        self.running_signals.update(load_checkpoints(self.checkpoints_path))
 
     def reset(self):
         self.running_signals.clear()
@@ -64,8 +73,9 @@ class ExitHandler:
         else:
             signal.price = self.contracts[position.code].limit_up
 
-        self.running_signals[signal.strategy_id][signal.code] = signal
         self.q_out.append((Event.Signal, signal))
+        self.running_signals[signal.strategy_id].append(signal.code)
+        dump_checkpoints(self.checkpoints_path, self.running_signals)
 
     def exit_by_out_date(self, strategy: Strategy, position: Position):
         if self.is_running_signal(strategy.id, position.code):
@@ -136,7 +146,7 @@ class ExitHandler:
             return
         if get_tpe_datetime().hour < 9 or get_tpe_datetime().hour >= 14:
             return
-        
+
         if position.action == Action.Buy:
             if snapshot.close / position.avg_prc - 1 <= strategy.exit_stop_loss:
                 self.send_exit_signal(position, ExitType.ExitByStopLoss)

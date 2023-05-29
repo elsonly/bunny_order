@@ -23,6 +23,10 @@ base: &base
   loguru:
     sink_dir: ./log
     sink_file: bunny_order.log
+    level: DEBUG
+
+  common:
+    checkpoints_dir: ./checkpoints
 
 
 local: &local
@@ -39,3 +43,8 @@ prod: &prod
     order_callback_file: Order.txt
     trade_callback_file: Deal.txt
     position_callback_file: Position.txt
+
+  loguru:
+    sink_dir: ./log
+    sink_file: bunny_order.log
+    level: INFO

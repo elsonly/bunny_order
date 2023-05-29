@@ -2,7 +2,7 @@ import datetime as dt
 from typing import Dict, DefaultDict, List, Deque, Tuple, Union
 import os
 import time
-from collections import deque, defaultdict
+from collections import deque
 from threading import Thread
 import threading
 
@@ -44,6 +44,7 @@ class Engine:
         self.unhandled_orders: Deque[SF31Order] = deque()
         # order_id -> Order
         self.order_callbacks: Dict[str, Order] = {}
+        self.unhandled_order_callbacks: Deque[Tuple[int, Order]] = deque()
         # order_id -> List[Trade]
         self.trade_callbacks: Dict[str, List[Trade]] = {}
         self.unhandled_trade_callbacks: Deque[Tuple[int, Trade]] = deque()
@@ -96,13 +97,18 @@ class Engine:
         )
 
         self.active = False
-        self.next_update_contracts_dt = (
-            dt.datetime.now().replace(hour=8, minute=25, second=0)
+        self.next_update_contracts_dt = dt.datetime.now().replace(
+            hour=8, minute=25, second=0
         )
         self.sync_interval = sync_interval
         self.trade_start_time = trade_start_time
         self.trade_end_time = trade_end_time
         self.debug = debug
+        self.init_checkpoints()
+
+    def init_checkpoints(self):
+        if not os.path.exists(Config.CHECKPOINTS_DIR):
+            os.mkdir(Config.CHECKPOINTS_DIR)
 
     def on_signal(self, signal: Signal):
         logger.info(signal)
@@ -111,7 +117,7 @@ class Engine:
             self.q_order_manager_in.append((Event.Signal, signal))
         self.dm.save_signal(signal)
 
-    def map_signal_id_and_order_id(self, order: Order):
+    def map_signal_id_and_order_id(self, order: Order) -> bool:
         for _ in range(len(self.unhandled_orders)):
             sf31_order = self.unhandled_orders.pop()
             if (
@@ -125,36 +131,47 @@ class Engine:
                 sf31_order.order_id = order.order_id
                 order.strategy = sf31_order.strategy_id
                 self.dm.update_sf31_order(sf31_order)
-                return
+                return True
             else:
                 self.unhandled_orders.append(sf31_order)
+                self.unhandled_order_callbacks.append((1, order))
 
-        logger.warning(
-            f"cannot map to sf31_order | order: {order}\n{self.unhandled_orders}"
-        )
+        return False
 
-    def on_order_callback(self, order: Order):
-        logger.info(order)
-        self.map_signal_id_and_order_id(order)
-        self.order_callbacks[order.order_id] = order
-        self.dm.save_order(order)
+    def on_order_callback(
+        self, order: Order, retry_counter: int = 0, max_retries: int = 10
+    ):
+        if self.map_signal_id_and_order_id(order):
+            logger.info(order)
+            self.order_callbacks[order.order_id] = order
+            self.dm.save_order(order)
+
+        elif retry_counter >= 0 and retry_counter < max_retries:
+            self.unhandled_order_callbacks.append((retry_counter + 1, order))
+
+        else:
+            self.order_callbacks[order.order_id] = order
+            logger.warning(
+                f"cannot map to sf31_order | order: {order}\n{self.unhandled_orders}"
+            )
+            self.dm.save_order(order)
 
     def on_trade_callback(
-        self, trade: Trade, retry_counter: int = 0, max_retries: int = 5
+        self, trade: Trade, retry_counter: int = 0, max_retries: int = 20
     ):
         if trade.order_id in self.order_callbacks:
-            logger.info(trade)
             trade.strategy = self.order_callbacks[trade.order_id].strategy
+            logger.info(trade)
             self.dm.save_trade(trade)
 
         elif retry_counter >= 0 and retry_counter < max_retries:
             self.unhandled_trade_callbacks.append((retry_counter + 1, trade))
 
         else:
-            self.dm.save_trade(trade)
             logger.warning(
                 f"cannot map trade to order | trade: {trade}\n{self.unhandled_trade_callbacks}"
             )
+            self.dm.save_trade(trade)
 
     def on_positions_callback(self, positions: List[SF31Position]):
         self.dm.save_positions(positions)
@@ -174,6 +191,7 @@ class Engine:
         logger.info("reset")
         self.unhandled_orders.clear()
         self.order_callbacks.clear()
+        self.unhandled_order_callbacks.clear()
         self.trade_callbacks.clear()
         self.unhandled_trade_callbacks.clear()
 
@@ -239,6 +257,10 @@ class Engine:
                     self.sync()
                     self.exit_handler.q_in.append((Event.Quote, self.snapshots))
                     prev_sync_ts = ts
+
+                for _ in range(len(self.unhandled_order_callbacks)):
+                    retry_counter, order = self.unhandled_order_callbacks.pop()
+                    self.on_order_callback(order, retry_counter=retry_counter)
 
                 for _ in range(len(self.unhandled_trade_callbacks)):
                     retry_counter, trade = self.unhandled_trade_callbacks.pop()

@@ -360,6 +360,8 @@ class OrderCallbackEventHandler(FileEventHandler):
         logger.debug(data)
         positions = []
         for raw_pos in data:
+            if raw_pos[0].startswith('\x00'):
+                continue
             n_hour = len(raw_pos[1])
             ptime = dt.time(
                 hour=int(raw_pos[1][: n_hour - 4]),

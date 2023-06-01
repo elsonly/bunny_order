@@ -29,6 +29,7 @@ class DataManager:
             db=Config.DB_DATABASE,
         )
         self.verbose = verbose
+        self.simulation = Config.DEBUG
 
     def convert_condition_to_sql_string(
         self, conditions: dict, sep: str = "and"
@@ -114,6 +115,8 @@ class DataManager:
         """
         method (str): {direct, upsert, timeseries, if_not_exists}
         """
+        if self.simulation:
+            return
         if df.empty:
             return
         if self.verbose:
@@ -154,6 +157,8 @@ class DataManager:
                 logger.info(f"save {table} | success")
 
     def save_one(self, table: str, data: dict, method: str, conditions: dict = {}):
+        if self.simulation:
+            return
         result = 1
         if method == "direct":
             result = self.cli.execute_values(
@@ -182,6 +187,8 @@ class DataManager:
             raise Exception(f"save {table} | failed", result)
 
     def update(self, table: str, uppdate_data: dict, conditions: dict):
+        if self.simulation:
+            return
         update_sql = self.convert_condition_to_sql_string(uppdate_data)
         cond_sql = self.convert_condition_to_sql_string(conditions)
 

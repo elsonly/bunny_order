@@ -8,7 +8,7 @@ from bunny_order.models import (
     RMRejectReason,
     SignalSource,
 )
-from bunny_order.utils import get_tpe_datetime, logger
+from bunny_order.utils import logger
 from bunny_order.config import Config
 
 

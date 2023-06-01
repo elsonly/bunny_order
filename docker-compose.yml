@@ -15,8 +15,9 @@ services:
         max-size: "10m"
         max-file: "3"
     volumes:
+      - ./log:/opt/bunny_order/log
+      - ./checkpoints:/opt/bunny_order/checkpoints
       - "C:/proprietary:/opt/signals"
-      - bunny_order-cache:/opt/bunny_order/checkpoints
     networks:
       - bunny-net
 

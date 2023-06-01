@@ -1,19 +1,24 @@
 import datetime as dt
-from typing import Dict, DefaultDict, List, Deque, Tuple, Union
+from typing import Dict, List, Deque, Tuple, Union
 import os
 import time
 from collections import deque
 from threading import Thread
 import threading
 
-from bunny_order.utils import logger, get_tpe_datetime
+from bunny_order.utils import (
+    logger,
+    get_tpe_datetime,
+    is_trade_time,
+    is_trade_date,
+    get_next_schedule_time,
+)
 from bunny_order.database.data_manager import DataManager
 from bunny_order.order_observer import OrderObserver
 from bunny_order.models import (
     Strategy,
     SF31Order,
     Signal,
-    Action,
     Trade,
     Order,
     SF31Position,
@@ -33,8 +38,6 @@ class Engine:
         self,
         debug: int,
         sync_interval: int,
-        trade_start_time: dt.time,
-        trade_end_time: dt.time,
     ):
         self.dm = DataManager()
         self.strategies: Dict[int, Strategy] = {}
@@ -97,12 +100,7 @@ class Engine:
         )
 
         self.active = False
-        self.next_update_contracts_dt = dt.datetime.now().replace(
-            hour=8, minute=25, second=0
-        )
         self.sync_interval = sync_interval
-        self.trade_start_time = trade_start_time
-        self.trade_end_time = trade_end_time
         self.debug = debug
         self.init_checkpoints()
 
@@ -151,9 +149,7 @@ class Engine:
 
         else:
             self.order_callbacks[order.order_id] = order
-            logger.warning(
-                f"cannot map to sf31_order | order: {order}\n{self.unhandled_orders}"
-            )
+            logger.warning(f"cannot map to sf31_order | order: {order}")
             self.dm.save_order(order)
 
     def on_trade_callback(
@@ -168,9 +164,7 @@ class Engine:
             self.unhandled_trade_callbacks.append((retry_counter + 1, trade))
 
         else:
-            logger.warning(
-                f"cannot map trade to order | trade: {trade}\n{self.unhandled_trade_callbacks}"
-            )
+            logger.warning(f"cannot map trade to order | trade: {trade}")
             self.dm.save_trade(trade)
 
     def on_positions_callback(self, positions: List[SF31Position]):
@@ -179,13 +173,16 @@ class Engine:
     def sync(self):
         self.strategies.update(self.dm.get_strategies())
         self.positions.update(self.dm.get_positions())
+
+    def update_contracts(self):
+        self.contracts.update(self.dm.get_contracts())
+
+    def update_snapshots(self):
         codes = []
         for strategy_id in self.positions:
             codes.extend(list(self.positions[strategy_id]))
+        self.snapshots.clear()
         self.snapshots.update(self.dm.get_quote_snapshots(codes))
-        if not self.contracts or (get_tpe_datetime() > self.next_update_contracts_dt):
-            self.contracts.update(self.dm.get_contracts())
-            self.next_update_contracts_dt += dt.timedelta(days=1)
 
     def reset(self):
         logger.info("reset")
@@ -195,30 +192,30 @@ class Engine:
         self.trade_callbacks.clear()
         self.unhandled_trade_callbacks.clear()
 
-        # xq_signal_dir = f"{Config.OBSERVER_BASE_PATH}/{Config.OBSERVER_XQ_SIGNALS_DIR}"
-        # if os.path.exists(xq_signal_dir):
-        #     for file in os.listdir(xq_signal_dir):
-        #         os.remove(f"{xq_signal_dir}/{file}")
+        xq_signal_dir = f"{Config.OBSERVER_BASE_PATH}/{Config.OBSERVER_XQ_SIGNALS_DIR}"
+        if os.path.exists(xq_signal_dir):
+            for file in os.listdir(xq_signal_dir):
+                os.remove(f"{xq_signal_dir}/{file}")
 
-        # order_path = f"{Config.OBSERVER_BASE_PATH}/{Config.OBSERVER_ORDER_CALLBACK_DIR}/{Config.OBSERVER_ORDER_CALLBACK_FILE}"
-        # if os.path.exists(order_path):
-        #     with open(order_path, "r+") as f:
-        #         _ = f.truncate(0)
+        order_path = f"{Config.OBSERVER_BASE_PATH}/{Config.OBSERVER_ORDER_CALLBACK_DIR}/{Config.OBSERVER_ORDER_CALLBACK_FILE}"
+        if os.path.exists(order_path):
+            with open(order_path, "r+") as f:
+                _ = f.truncate(0)
 
-        # trade_path = f"{Config.OBSERVER_BASE_PATH}/{Config.OBSERVER_ORDER_CALLBACK_DIR}/{Config.OBSERVER_TRADE_CALLBACK_FILE}"
-        # if os.path.exists(trade_path):
-        #     with open(trade_path, "r+") as f:
-        #         _ = f.truncate(0)
+        trade_path = f"{Config.OBSERVER_BASE_PATH}/{Config.OBSERVER_ORDER_CALLBACK_DIR}/{Config.OBSERVER_TRADE_CALLBACK_FILE}"
+        if os.path.exists(trade_path):
+            with open(trade_path, "r+") as f:
+                _ = f.truncate(0)
 
-        # sf31_order_path = (
-        #     f"{Config.OBSERVER_BASE_PATH}/{Config.OBSERVER_SF31_ORDERS_DIR}"
-        # )
-        # for root, dir, files in os.walk(sf31_order_path):
-        #     for file in files:
-        #         if file.endswith(".log"):
-        #             file_path = f"{root}/{file}"
-        #             with open(file_path, "r+") as f:
-        #                 _ = f.truncate(0)
+        sf31_order_path = (
+            f"{Config.OBSERVER_BASE_PATH}/{Config.OBSERVER_SF31_ORDERS_DIR}"
+        )
+        for root, dir, files in os.walk(sf31_order_path):
+            for file in files:
+                if file.endswith(".log"):
+                    file_path = f"{root}/{file}"
+                    with open(file_path, "r+") as f:
+                        _ = f.truncate(0)
 
         self.observer.reset_checkpoints()
         self.exit_handler.reset()
@@ -226,35 +223,41 @@ class Engine:
     def run(self):
         logger.info("Start Engine")
         self.sync()
+        self.update_contracts()
         self.observer.start()
         self.__thread_om.start()
         self.__thread_exit_handler.start()
         prev_sync_ts = 0
-        dt_8am = get_tpe_datetime().replace(hour=8, minute=0, second=0, microsecond=0)
-        if get_tpe_datetime() >= dt_8am:
-            next_reset_dt = dt_8am + dt.timedelta(days=1)
-        else:
-            next_reset_dt = dt_8am
+
+        next_reset_dt1 = get_next_schedule_time(Config.RESET_TIME1)
+        next_reset_dt2 = get_next_schedule_time(Config.RESET_TIME2)
+        next_update_contracts_dt = get_next_schedule_time(Config.UPDATE_CONTRACTS_TIME)
+
         self.active = True
         while self.active:
             try:
-                if get_tpe_datetime() >= next_reset_dt:
+                cur_dt = get_tpe_datetime()
+                if cur_dt >= next_reset_dt1 or cur_dt >= next_reset_dt2:
                     self.reset()
-                    next_reset_dt += dt.timedelta(days=1)
+                    next_reset_dt1 += dt.timedelta(days=1)
+                    next_reset_dt2 += dt.timedelta(days=1)
 
-                if not self.debug and get_tpe_datetime().weekday() >= 5:
+                if cur_dt.time() < Config.SIGNAL_TIME:
                     time.sleep(10)
                     continue
-                if not self.debug and (
-                    get_tpe_datetime().time() < self.trade_start_time
-                    or get_tpe_datetime().time() > self.trade_end_time
-                ):
-                    time.sleep(10)
-                    continue
+
+                if cur_dt >= next_update_contracts_dt:
+                    self.update_contracts()
+                    next_update_contracts_dt += dt.timedelta(days=1)
 
                 ts = time.time()
-                if ts - prev_sync_ts > self.sync_interval:
+                if (
+                    ts - prev_sync_ts > self.sync_interval
+                    and is_trade_date()
+                    and is_trade_time()
+                ):
                     self.sync()
+                    self.update_snapshots()
                     self.exit_handler.q_in.append((Event.Quote, self.snapshots))
                     prev_sync_ts = ts
 
@@ -286,13 +289,12 @@ class Engine:
                     else:
                         logger.warning(f"Invalid event: {event}")
 
-                time.sleep(0.01)
             except KeyboardInterrupt:
                 self.active = False
                 self.stop()
             except Exception as e:
                 logger.exception(e)
-                time.sleep(0.01)
+            time.sleep(0.01)
         logger.info("Shutdown Engine")
 
     def stop(self):

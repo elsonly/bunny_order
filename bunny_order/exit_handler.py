@@ -25,6 +25,9 @@ from bunny_order.utils import (
     logger,
     dump_checkpoints,
     load_checkpoints,
+    is_trade_date,
+    is_trade_time,
+    is_before_market_signal_time,
 )
 from bunny_order.config import Config
 
@@ -48,6 +51,7 @@ class ExitHandler:
         self.running_signals: DefaultDict[int, List[str]] = defaultdict(list)
         self.checkpoints_path = f"{Config.CHECKPOINTS_DIR}/exit_handler.json"
         self.running_signals.update(load_checkpoints(self.checkpoints_path))
+        self.quote_delay_tolerance = Config.QUOTE_DELAY_TOLERANCE
 
     def reset(self):
         self.running_signals.clear()
@@ -127,8 +131,6 @@ class ExitHandler:
             return
         if strategy.exit_take_profit is None:
             return
-        if get_tpe_datetime().hour < 9 or get_tpe_datetime().hour >= 14:
-            return
 
         if position.action == Action.Buy:
             if snapshot.close / position.avg_prc - 1 >= strategy.exit_take_profit:
@@ -143,8 +145,6 @@ class ExitHandler:
         if self.is_running_signal(strategy.id, position.code):
             return
         if strategy.exit_stop_loss is None:
-            return
-        if get_tpe_datetime().hour < 9 or get_tpe_datetime().hour >= 14:
             return
 
         if position.action == Action.Buy:
@@ -166,7 +166,17 @@ class ExitHandler:
                 if self.is_running_signal(strategy_id, code):
                     continue
 
-                self.exit_by_out_date(self.strategies[strategy_id], position)
+                if snapshots[code].dt <= get_tpe_datetime() - dt.timedelta(
+                    seconds=self.quote_delay_tolerance
+                ):
+                    continue
+                
+                # skip matching order
+                if snapshots[code].total_volume == 0:
+                    continue
+                if snapshots[code].volume == 0:
+                    continue
+
                 self.exit_by_days_profit_limit(
                     self.strategies[strategy_id], position, snapshots[code]
                 )
@@ -177,16 +187,32 @@ class ExitHandler:
                     self.strategies[strategy_id], position, snapshots[code]
                 )
 
+    def before_market_signals(self):
+        for strategy_id, d0 in self.positions.items():
+            for code, position in d0.items():
+                if self.is_running_signal(strategy_id, code):
+                    continue
+
+                self.exit_by_out_date(self.strategies[strategy_id], position)
+
     def run(self):
         logger.info("Start Exit Handler")
         while not self.active_event.isSet():
             try:
+                if not is_trade_date():
+                    time.sleep(10)
+                    continue
+
                 if self.q_in:
                     event, data = self.q_in.pop()
                     if event == Event.Quote:
-                        self.on_quote(data)
+                        if is_trade_time():
+                            self.on_quote(data)
                     else:
                         logger.warning(f"Invalid event: {event}")
+
+                if is_before_market_signal_time():
+                    self.before_market_signals()
 
             except Exception as e:
                 logger.exception(e)

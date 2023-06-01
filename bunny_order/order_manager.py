@@ -19,7 +19,13 @@ from bunny_order.models import (
     Contract,
 )
 from bunny_order.database.data_manager import DataManager
-from bunny_order.utils import logger, adjust_price_for_tick_unit, get_tpe_datetime
+from bunny_order.utils import (
+    logger,
+    adjust_price_for_tick_unit,
+    get_tpe_datetime,
+    is_trade_time,
+    is_trade_date,
+)
 from bunny_order.config import Config
 
 
@@ -42,6 +48,7 @@ class OrderManager:
         )
         self.pause_order = False
         self.active_event = active_event
+        self.pending_signals: Deque[Signal] = deque()
 
     def reset(self):
         self.unhandled_orders.clear()
@@ -123,12 +130,10 @@ class OrderManager:
         )
         self.place_order(order2)
 
-    def excute_orders_open(self, signal: Signal):
-        # if get_tpe_datetime().time() < dt.time(
-        #     hour=8, minute=30, second=0
-        # ) or get_tpe_datetime().time() > dt.time(hour=9, minute=0, second=0):
-        #     return
-
+    def excute_pre_market_orders(self, signal: Signal):
+        if not is_trade_time():
+            logger.warning(f"invalid trade time for signal: {signal}")
+            return
         order = SF31Order(
             signal_id=signal.id,
             sfdate=signal.sdate,
@@ -149,7 +154,7 @@ class OrderManager:
         if signal.source == SignalSource.XQ:
             self.excute_orders_half_open_half_order_low_ratio(signal)
         elif signal.source == SignalSource.ExitHandler:
-            self.excute_orders_open(signal)
+            self.excute_pre_market_orders(signal)
         else:
             raise Exception(f"invalid signal source: {signal.source}")
 
@@ -163,16 +168,27 @@ class OrderManager:
         logger.info("Start Order Manager")
         while not self.active_event.isSet():
             try:
+                if not is_trade_date():
+                    time.sleep(10)
+                    continue
                 if self.q_in:
                     event, data = self.q_in.pop()
                     if event == Event.Signal:
-                        self.on_signal(data)
+                        if is_trade_time():
+                            self.on_signal(data)
+                        else:
+                            self.pending_signals.append(data)
                     elif event == Event.OrderCallback:
                         self.on_order_callback(data)
                     elif event == Event.TradeCallback:
                         self.on_trade_callback(data)
                     else:
                         logger.warning(f"Invalid event: {event}")
+
+                if is_trade_time():
+                    while self.pending_signals:
+                        signal = self.pending_signals.pop()
+                        self.on_signal(signal)
 
             except Exception as e:
                 logger.exception(e)

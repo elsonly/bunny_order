@@ -18,7 +18,6 @@ import datetime as dt
 from bunny_order.config import Config
 from bunny_order.utils import (
     logger,
-    get_tpe_datetime,
     event_wrapper,
     get_signal_id,
     dump_checkpoints,

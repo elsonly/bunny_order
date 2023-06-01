@@ -170,7 +170,7 @@ def test_exit_by_days_profit_limit(
 
 
 def test_exit_by_take_profit(
-    freezer, mocker: MockerFixture, exit_handler: ExitHandler
+    mocker: MockerFixture, exit_handler: ExitHandler
 ):
     position = Position(
         strategy=1,
@@ -215,15 +215,6 @@ def test_exit_by_take_profit(
 
     m_send_exit_signal = mocker.patch.object(exit_handler, "send_exit_signal")
     # no signal
-    freezer.move_to("2023-05-30T00:00:00") # not met
-    strategy.exit_take_profit = -0.1 # met
-    exit_handler.exit_by_take_profit(
-        strategy=strategy, position=position, snapshot=snapshot
-    )
-    m_send_exit_signal.assert_not_called()
-
-    # no signal
-    freezer.move_to("2023-05-30T01:00:00") # met
     strategy.exit_take_profit = 0.1 # not met
     exit_handler.exit_by_take_profit(
         strategy=strategy, position=position, snapshot=snapshot
@@ -231,7 +222,6 @@ def test_exit_by_take_profit(
     m_send_exit_signal.assert_not_called()
 
     # signal
-    freezer.move_to("2023-05-30T01:00:00") # met
     strategy.exit_take_profit = -0.1 # met
     exit_handler.exit_by_take_profit(
         strategy=strategy, position=position, snapshot=snapshot
@@ -239,7 +229,7 @@ def test_exit_by_take_profit(
     m_send_exit_signal.assert_called_once_with(position, ExitType.ExitByTakeProfit)
 
 def test_exit_by_stop_loss(
-    freezer, mocker: MockerFixture, exit_handler: ExitHandler
+    mocker: MockerFixture, exit_handler: ExitHandler
 ):
     position = Position(
         strategy=1,
@@ -284,15 +274,6 @@ def test_exit_by_stop_loss(
 
     m_send_exit_signal = mocker.patch.object(exit_handler, "send_exit_signal")
     # no signal
-    freezer.move_to("2023-05-30T00:00:00") # not met
-    strategy.exit_stop_loss = 0.1 # met
-    exit_handler.exit_by_stop_loss(
-        strategy=strategy, position=position, snapshot=snapshot
-    )
-    m_send_exit_signal.assert_not_called()
-
-    # no signal
-    freezer.move_to("2023-05-30T01:00:00") # met
     strategy.exit_stop_loss = -0.1 # not met
     exit_handler.exit_by_stop_loss(
         strategy=strategy, position=position, snapshot=snapshot
@@ -300,7 +281,6 @@ def test_exit_by_stop_loss(
     m_send_exit_signal.assert_not_called()
 
     # signal
-    freezer.move_to("2023-05-30T01:00:00") # met
     strategy.exit_stop_loss = 0.1 # met
     exit_handler.exit_by_stop_loss(
         strategy=strategy, position=position, snapshot=snapshot

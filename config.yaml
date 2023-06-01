@@ -14,8 +14,15 @@ base: &base
     position_callback_file: Position.txt
 
   engine:
-    trade_start_time: "083000"
-    trade_end_time: "143000"
+    signal_time: "0820"
+    trade_start_time: "0840"
+    trade_end_time: "1430"
+    update_contracts_time: "0815"
+    reset_time1: "0750"
+    reset_time2: "1500"
+
+  exit_handler:
+    quote_delay_tolerance: 60
 
   order_manager:
     daily_amount_limit: 10000000
@@ -37,7 +44,7 @@ prod: &prod
   <<: *base
   observer:
     base_path: /opt/signals
-    sf31_orders_dir: sf31_orders
+    sf31_orders_dir: print
     xq_signals_dir: XQ_output
     order_callback_dir: status
     order_callback_file: Order.txt

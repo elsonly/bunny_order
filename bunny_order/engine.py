@@ -237,9 +237,12 @@ class Engine:
         while self.active:
             try:
                 cur_dt = get_tpe_datetime()
-                if cur_dt >= next_reset_dt1 or cur_dt >= next_reset_dt2:
+                if cur_dt >= next_reset_dt1:
                     self.reset()
                     next_reset_dt1 += dt.timedelta(days=1)
+                    
+                if cur_dt >= next_reset_dt2:
+                    self.reset()
                     next_reset_dt2 += dt.timedelta(days=1)
 
                 if cur_dt.time() < Config.SIGNAL_TIME:

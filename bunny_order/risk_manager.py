@@ -28,6 +28,8 @@ class RiskManager:
             return
         if signal.source == SignalSource.XQ:
             self.qty_leverage_ratio_adjustment(signal)
+        if not self._validate_trade_datetime(signal):
+            return
         if not self._validate_quantity_unit(signal):
             return
         if not self._validate_daily_transaction_amount_limit(signal):
@@ -47,6 +49,9 @@ class RiskManager:
         signal.quantity = int(
             signal.quantity * self.strategies[signal.strategy_id].leverage_ratio
         )
+
+    def _validate_trade_datetime(self, signal: Signal) -> bool:
+        return signal.sdate.weekday() < 5
 
     def _validate_quantity_unit(self, signal: Signal) -> bool:
         if signal.quantity < 1:

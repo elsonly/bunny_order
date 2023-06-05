@@ -278,7 +278,7 @@ class OrderCallbackEventHandler(FileEventHandler):
         self.checkpoints.clear()
         dump_checkpoints(self.checkpoints_path, self.checkpoints)
 
-    def on_orders(self, data: List[str]):
+    def on_orders(self, data: List[List[str]]):
         """
         data (list):
             ex: [
@@ -287,6 +287,14 @@ class OrderCallbackEventHandler(FileEventHandler):
                 ]
         """
         for raw_order in data:
+            if len(raw_order) > 11:
+                # TODO:HOT FIX
+                _date = raw_order.pop()
+                _msg = raw_order.pop()
+                _msg = raw_order.pop() + " " + _msg
+                raw_order.append(_msg)
+                raw_order.append(_date)
+                
             n_hour = len(raw_order[3])
             order_time = dt.time(
                 hour=int(raw_order[3][: n_hour - 4]),

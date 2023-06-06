@@ -6,6 +6,7 @@ import datetime as dt
 from functools import wraps
 from decimal import Decimal, ROUND_HALF_UP
 import json
+import uuid
 
 from bunny_order.config import Config
 
@@ -63,19 +64,8 @@ def adjust_price_for_tick_unit(price: Decimal) -> Decimal:
     return adj_price
 
 
-SIGNAL_COUNTER = 0
-
-
-def get_signal_id() -> str:
-    """
-    return (str): signal id
-        ex: '001', '999'
-    """
-    global SIGNAL_COUNTER
-    SIGNAL_COUNTER += 1
-    SIGNAL_COUNTER = SIGNAL_COUNTER % 1000
-    signal_id = f"{str(SIGNAL_COUNTER).rjust(3, '0')}"
-    return signal_id
+def get_signal_id(digits: int = 16) -> str:
+    return uuid.uuid4().hex[:digits]
 
 
 def dump_checkpoints(path: str, data: dict) -> None:

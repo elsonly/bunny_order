@@ -117,7 +117,7 @@ class Engine:
 
     def map_signal_id_and_order_id(self, order: Order) -> bool:
         for _ in range(len(self.unhandled_orders)):
-            sf31_order = self.unhandled_orders.pop()
+            sf31_order = self.unhandled_orders.popleft()
             if (
                 order.order_date == sf31_order.sfdate
                 and order.code == sf31_order.code
@@ -132,7 +132,6 @@ class Engine:
                 return True
             else:
                 self.unhandled_orders.append(sf31_order)
-                self.unhandled_order_callbacks.append((1, order))
 
         return False
 
@@ -265,15 +264,15 @@ class Engine:
                     prev_sync_ts = ts
 
                 for _ in range(len(self.unhandled_order_callbacks)):
-                    retry_counter, order = self.unhandled_order_callbacks.pop()
+                    retry_counter, order = self.unhandled_order_callbacks.popleft()
                     self.on_order_callback(order, retry_counter=retry_counter)
 
                 for _ in range(len(self.unhandled_trade_callbacks)):
-                    retry_counter, trade = self.unhandled_trade_callbacks.pop()
+                    retry_counter, trade = self.unhandled_trade_callbacks.popleft()
                     self.on_trade_callback(trade, retry_counter=retry_counter)
 
                 while self.q_order_observer_out:
-                    event, data = self.q_order_observer_out.pop()
+                    event, data = self.q_order_observer_out.popleft()
                     if event == Event.Signal:
                         self.on_signal(data)
                     elif event == Event.OrderCallback:
@@ -286,7 +285,7 @@ class Engine:
                         logger.warning(f"Invalid event: {event}")
 
                 while self.q_exit_handler_out:
-                    event, data = self.q_exit_handler_out.pop()
+                    event, data = self.q_exit_handler_out.popleft()
                     if event == event.Signal:
                         self.on_signal(data)
                     else:

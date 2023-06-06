@@ -38,7 +38,7 @@ def test_send_exit_signal(exit_handler: ExitHandler):
     )
 
     exit_handler.send_exit_signal(position, ExitType.ExitByOutDate)
-    event, signal = exit_handler.q_out.pop()
+    event, signal = exit_handler.q_out.popleft()
 
     assert event == Event.Signal
     assert isinstance(signal, Signal)

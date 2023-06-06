@@ -204,7 +204,7 @@ class ExitHandler:
                     continue
 
                 if self.q_in:
-                    event, data = self.q_in.pop()
+                    event, data = self.q_in.popleft()
                     if event == Event.Quote:
                         if is_trade_time():
                             self.on_quote(data)

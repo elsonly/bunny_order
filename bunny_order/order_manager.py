@@ -172,7 +172,7 @@ class OrderManager:
                     time.sleep(10)
                     continue
                 if self.q_in:
-                    event, data = self.q_in.pop()
+                    event, data = self.q_in.popleft()
                     if event == Event.Signal:
                         if is_trade_time():
                             self.on_signal(data)
@@ -187,7 +187,7 @@ class OrderManager:
 
                 if is_trade_time():
                     while self.pending_signals:
-                        signal = self.pending_signals.pop()
+                        signal = self.pending_signals.popleft()
                         self.on_signal(signal)
 
             except Exception as e:

@@ -92,9 +92,13 @@ class XQSignalEventHandler(FileEventHandler):
             logger.info("directory created:{0}".format(event.src_path))
         else:
             logger.info("file created:{0}".format(event.src_path))
+            if event.src_path.endswith(".swp"):
+                return
+            
             date_, strategy = self.parse_file(event.src_path)
             if date_ == "" or strategy == "":
                 return
+            
             with open(event.src_path, "r", encoding="utf-8") as f:
                 data = [x.split() for x in f.readlines()]
 
@@ -108,6 +112,8 @@ class XQSignalEventHandler(FileEventHandler):
             logger.info("directory modified:{0}".format(event.src_path))
         else:
             logger.info("file modified:{0}".format(event.src_path))
+            if event.src_path.endswith(".swp"):
+                return
             date_, strategy = self.parse_file(event.src_path)
             if date_ == "" or strategy == "":
                 return
@@ -218,6 +224,15 @@ class OrderCallbackEventHandler(FileEventHandler):
         else:
             logger.info("file created:{0}".format(event.src_path))
 
+            if not event.src_path.endswith(
+                (
+                    Config.OBSERVER_ORDER_CALLBACK_FILE,
+                    Config.OBSERVER_TRADE_CALLBACK_FILE,
+                    Config.OBSERVER_POSITION_CALLBACK_FILE,
+                )
+            ):
+                return
+
             with open(event.src_path, "r", encoding="utf-8") as f:
                 data = [x.strip().split(",") for x in f.readlines()]
 
@@ -245,6 +260,15 @@ class OrderCallbackEventHandler(FileEventHandler):
                 logger.debug("file modified:{0}".format(event.src_path))
             else:
                 logger.info("file modified:{0}".format(event.src_path))
+
+            if not event.src_path.endswith(
+                (
+                    Config.OBSERVER_ORDER_CALLBACK_FILE,
+                    Config.OBSERVER_TRADE_CALLBACK_FILE,
+                    Config.OBSERVER_POSITION_CALLBACK_FILE,
+                )
+            ):
+                return
 
             with open(event.src_path, "r", encoding="utf-8") as f:
                 data = [x.strip().split(",") for x in f.readlines()]
@@ -287,14 +311,6 @@ class OrderCallbackEventHandler(FileEventHandler):
                 ]
         """
         for raw_order in data:
-            if len(raw_order) > 11:
-                # TODO:HOT FIX
-                _date = raw_order.pop()
-                _msg = raw_order.pop()
-                _msg = raw_order.pop() + " " + _msg
-                raw_order.append(_msg)
-                raw_order.append(_date)
-                
             n_hour = len(raw_order[3])
             order_time = dt.time(
                 hour=int(raw_order[3][: n_hour - 4]),
@@ -367,7 +383,7 @@ class OrderCallbackEventHandler(FileEventHandler):
         logger.debug(data)
         positions = []
         for raw_pos in data:
-            if raw_pos[0].startswith('\x00'):
+            if raw_pos[0].startswith("\x00"):
                 continue
             n_hour = len(raw_pos[1])
             ptime = dt.time(

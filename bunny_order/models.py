@@ -181,4 +181,5 @@ class Contract(BaseModel):
     reference: Decimal
     limit_up: Decimal
     limit_down: Decimal
+    update_date: Optional[dt.date]
     # day_trade: Optional[bool]

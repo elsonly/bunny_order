@@ -25,6 +25,7 @@ from bunny_order.utils import (
     get_tpe_datetime,
     is_trade_time,
     is_trade_date,
+    is_latest_contracts,
 )
 from bunny_order.config import Config
 
@@ -171,6 +172,12 @@ class OrderManager:
                 if not is_trade_date():
                     time.sleep(10)
                     continue
+
+                if not is_latest_contracts(self.contracts):
+                    logger.warning("contracts outdated")
+                    time.sleep(10)
+                    continue
+
                 if self.q_in:
                     event, data = self.q_in.popleft()
                     if event == Event.Signal:

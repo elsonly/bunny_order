@@ -7,8 +7,10 @@ from functools import wraps
 from decimal import Decimal, ROUND_HALF_UP
 import json
 import uuid
+from typing import Dict
 
 from bunny_order.config import Config
+from bunny_order.models import Contract
 
 
 if not os.path.exists(Config.LOGURU_SINK_DIR):
@@ -108,3 +110,11 @@ def get_next_schedule_time(dtime: dt.time) -> dt.datetime:
         next_dt = dt_
 
     return next_dt
+
+
+def is_latest_contracts(contracts: Dict[str, Contract]) -> bool:
+    for code in ["0050", "00878", "2330", "2317"]:
+        if code in contracts:
+            if contracts[code].update_date != get_tpe_datetime().date():
+                return False
+    return True

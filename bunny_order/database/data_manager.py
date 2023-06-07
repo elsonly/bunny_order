@@ -318,7 +318,7 @@ class DataManager:
 
     def get_contracts(self) -> None:
         data = self.cli.execute_query(
-            f"""select code, name, reference, limit_up, limit_down
+            f"""select code, name, reference, limit_up, limit_down, update_date
             from sino.contracts 
             where length(code) = 4 and security_type='STK';
             """,

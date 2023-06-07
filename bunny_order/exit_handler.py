@@ -28,6 +28,7 @@ from bunny_order.utils import (
     is_trade_date,
     is_trade_time,
     is_before_market_signal_time,
+    is_latest_contracts,
 )
 from bunny_order.config import Config
 
@@ -200,6 +201,11 @@ class ExitHandler:
         while not self.active_event.isSet():
             try:
                 if not is_trade_date():
+                    time.sleep(10)
+                    continue
+                
+                if not is_latest_contracts(self.contracts):
+                    logger.warning("contracts outdated")
                     time.sleep(10)
                     continue
 

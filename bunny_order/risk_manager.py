@@ -8,7 +8,7 @@ from bunny_order.models import (
     RMRejectReason,
     SignalSource,
 )
-from bunny_order.utils import logger
+from bunny_order.utils import logger, get_tpe_datetime
 from bunny_order.config import Config
 
 
@@ -30,6 +30,10 @@ class RiskManager:
             self.qty_leverage_ratio_adjustment(signal)
         if not self._validate_trade_datetime(signal):
             return
+        if not self._validate_latest_contract(signal):
+            return
+        if not self._validate_dividend_date(signal):
+            return
         if not self._validate_quantity_unit(signal):
             return
         if not self._validate_daily_transaction_amount_limit(signal):
@@ -37,6 +41,21 @@ class RiskManager:
         if not self._validate_strategy_amount_limit(signal):
             return
         signal.rm_validated = True
+
+    def _validate_latest_contract(self, signal: Signal) -> bool:
+        if signal.code not in self.contracts:
+            logger.warning(f"contract not found: {signal.code}")
+            return False
+
+        if self.contracts[signal.code].update_date != get_tpe_datetime().date():
+            logger.warning(f"contract outdated: {signal.code}")
+            return False
+
+        return True
+
+    def _validate_dividend_date(self, signal: Signal) -> bool:
+        # TODO
+        return True
 
     def _validate_strategy(self, signal: Signal) -> bool:
         if signal.strategy_id not in self.strategies:
@@ -61,7 +80,9 @@ class RiskManager:
         return True
 
     def _validate_daily_transaction_amount_limit(self, signal: Signal) -> bool:
+        # TODO
         return True
 
     def _validate_strategy_amount_limit(self, signal: Signal) -> bool:
+        # TODO
         return True

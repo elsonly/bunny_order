@@ -250,10 +250,10 @@ class DataManager:
 
     def save_order(self, order: Order):
         if order.order_id == "00000":
-            self.save_one(table="dealer.orders_tmp", data=order.dict(), method="direct")
+            self.save_one(table="dealer.orders", data=order.dict(), method="direct")
         else:
             self.save_one(
-                table="dealer.orders_tmp",
+                table="dealer.orders",
                 data=order.dict(),
                 method="if_not_exists",
                 conditions={
@@ -264,7 +264,7 @@ class DataManager:
 
     def save_trade(self, trade: Trade):
         self.save_one(
-            table="dealer.trades_tmp",
+            table="dealer.trades",
             data=trade.dict(),
             method="if_not_exists",
             conditions={

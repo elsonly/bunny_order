@@ -15,13 +15,14 @@ from bunny_order.models import (
     Action,
     ExitType,
 )
+from bunny_order.common import Positions, Strategies, Contracts
 
 
 @pytest.fixture(name="exit_handler")
 def exit_handler(
-    strategies: Dict[int, Strategy],
-    positions: Dict[str, Dict[str, Position]],
-    contracts: Dict[str, Contract],
+    strategies: Strategies,
+    positions: Positions,
+    contracts: Contracts,
 ):
     return ExitHandler(strategies=strategies, positions=positions, contracts=contracts)
 

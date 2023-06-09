@@ -17,6 +17,7 @@ from bunny_order.models import (
 )
 from bunny_order.database.tsdb_client import TSDBClient
 from bunny_order.config import Config
+from bunny_order.utils import get_tpe_datetime
 
 
 class DataManager:
@@ -203,7 +204,7 @@ class DataManager:
 
     def get_strategies(self) -> Dict[int, Strategy]:
         data = self.cli.execute_query("select * from dealer.strategy", "dict")
-        return {x["id"]: Strategy(**x) for x in data}
+        return {x["id"]: Strategy(**x, update_dt=get_tpe_datetime()) for x in data}
 
     def save_signal(self, signal: Signal):
         self.save_one(
@@ -296,7 +297,9 @@ class DataManager:
         for row in data:
             if row["strategy"] not in d:
                 d[row["strategy"]] = {}
-            d[row["strategy"]][row["code"]] = Position(**row)
+            d[row["strategy"]][row["code"]] = Position(
+                **row, update_dt=get_tpe_datetime()
+            )
         return d
 
     def get_quote_snapshots(self, codes: List[str]) -> Dict[str, QuoteSnapshot]:

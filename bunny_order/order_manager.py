@@ -25,16 +25,16 @@ from bunny_order.utils import (
     get_tpe_datetime,
     is_trade_time,
     is_trade_date,
-    is_latest_contracts,
 )
+from bunny_order.common import Strategies, Contracts
 from bunny_order.config import Config
 
 
 class OrderManager:
     def __init__(
         self,
-        strategies: Dict[int, Strategy],
-        contracts: Dict[str, Contract],
+        strategies: Strategies,
+        contracts: Contracts,
         unhandled_orders: Deque[SF31Order] = deque(),
         q_in: Deque[Tuple[Event, Union[Signal, Order, Trade]]] = deque(),
         active_event: threading.Event = threading.Event(),
@@ -61,17 +61,17 @@ class OrderManager:
         logger.info(order)
         self.unhandled_orders.append(order)
 
-        strategy = self.strategies[order.strategy_id].name
+        strategy_name = self.strategies.get_strategy(order.strategy_id).name
         ts = dt.datetime.combine(order.sfdate, order.sftime).timestamp()
         if not os.path.exists(f"{self.s31_orders_dir}"):
             os.mkdir(f"{self.s31_orders_dir}")
-        if not os.path.exists(f"{self.s31_orders_dir}/{strategy}"):
-            os.mkdir(f"{self.s31_orders_dir}/{strategy}")
+        if not os.path.exists(f"{self.s31_orders_dir}/{strategy_name}"):
+            os.mkdir(f"{self.s31_orders_dir}/{strategy_name}")
 
         if order.action == Action.Buy:
-            path = f"{self.s31_orders_dir}/{strategy}/Buy.log"
+            path = f"{self.s31_orders_dir}/{strategy_name}/Buy.log"
         elif order.action == Action.Sell:
-            path = f"{self.s31_orders_dir}/{strategy}/Sell.log"
+            path = f"{self.s31_orders_dir}/{strategy_name}/Sell.log"
 
         if order.security_type == SecurityType.Stock:
             security_type = "Stock"
@@ -90,9 +90,11 @@ class OrderManager:
         pass
 
     def price_order_low_ratio_adjustment(self, signal: Signal) -> Decimal:
-        if self.strategies[signal.strategy_id].order_low_ratio is not None:
-            adj_prc_float = self.contracts[signal.code].reference * (
-                1 + Decimal(self.strategies[signal.strategy_id].order_low_ratio / 100)
+        strategy = self.strategies.get_strategy(signal.strategy_id)
+        contract = self.contracts.get_contract(signal.code)
+        if strategy.order_low_ratio is not None:
+            adj_prc_float = contract.reference * (
+                1 + Decimal(strategy.order_low_ratio / 100)
             )
             adj_prc = adjust_price_for_tick_unit(adj_prc_float)
             return adj_prc
@@ -111,7 +113,7 @@ class OrderManager:
             order_type=signal.order_type,
             price_type=signal.price_type,
             action=signal.action,
-            quantity=int(0.5 * signal.quantity),
+            quantity=signal.quantity - int(0.5 * signal.quantity),
             price=signal.price,
         )
         self.place_order(order1)
@@ -126,7 +128,7 @@ class OrderManager:
             order_type=signal.order_type,
             price_type=signal.price_type,
             action=signal.action,
-            quantity=signal.quantity - int(0.5 * signal.quantity),
+            quantity=int(0.5 * signal.quantity),
             price=self.price_order_low_ratio_adjustment(signal),
         )
         self.place_order(order2)
@@ -165,16 +167,20 @@ class OrderManager:
     def on_trade_callback(self, trade: Trade):
         logger.info(trade)
 
+    def system_check(self) -> bool:
+        if not is_trade_date():
+            return False
+        if not self.contracts.check_updated():
+            return False
+        if not self.strategies.check_updated():
+            return False
+        return True
+
     def run(self):
         logger.info("Start Order Manager")
         while not self.active_event.isSet():
             try:
-                if not is_trade_date():
-                    time.sleep(10)
-                    continue
-
-                if not is_latest_contracts(self.contracts):
-                    logger.warning("contracts outdated")
+                if not self.system_check():
                     time.sleep(10)
                     continue
 
@@ -192,12 +198,12 @@ class OrderManager:
                     else:
                         logger.warning(f"Invalid event: {event}")
 
-                if is_trade_time():
-                    while self.pending_signals:
-                        signal = self.pending_signals.popleft()
-                        self.on_signal(signal)
+                while is_trade_time() and self.pending_signals:
+                    signal = self.pending_signals.popleft()
+                    self.on_signal(signal)
 
             except Exception as e:
                 logger.exception(e)
+
             time.sleep(0.01)
         logger.info("Shutdown Order Manager")

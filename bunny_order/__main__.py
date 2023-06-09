@@ -5,5 +5,6 @@ if __name__ == "__main__":
     engine = Engine(
         debug=Config.DEBUG,
         sync_interval=5,
+        snapshot_interval=5,
     )
     engine.run()

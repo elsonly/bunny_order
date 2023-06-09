@@ -28,17 +28,17 @@ from bunny_order.utils import (
     is_trade_date,
     is_trade_time,
     is_before_market_signal_time,
-    is_latest_contracts,
 )
+from bunny_order.common import Strategies, Snapshots, Positions, Contracts
 from bunny_order.config import Config
 
 
 class ExitHandler:
     def __init__(
         self,
-        strategies: Dict[int, Strategy],
-        positions: Dict[str, Dict[str, Position]],
-        contracts: Dict[str, Contract],
+        strategies: Strategies,
+        positions: Positions,
+        contracts: Contracts,
         q_in: Deque[Tuple[Event, Dict[str, QuoteSnapshot]]] = deque(),
         q_out: Deque[Tuple[Event, Signal]] = deque(),
         active_event: threading.Event = threading.Event(),
@@ -73,10 +73,11 @@ class ExitHandler:
             price=0,
             exit_type=exit_type,
         )
+        contract = self.contracts.get_contract(position.code)
         if signal.action == Action.Sell:
-            signal.price = self.contracts[position.code].limit_down
+            signal.price = contract.limit_down
         else:
-            signal.price = self.contracts[position.code].limit_up
+            signal.price = contract.limit_up
 
         self.q_out.append((Event.Signal, signal))
         self.running_signals[signal.strategy_id].append(signal.code)
@@ -161,51 +162,53 @@ class ExitHandler:
             and code in self.running_signals[strategy_id]
         )
 
-    def on_quote(self, snapshots: Dict[str, QuoteSnapshot]):
-        for strategy_id, d0 in self.positions.items():
-            for code, position in d0.items():
-                if self.is_running_signal(strategy_id, code):
-                    continue
+    def on_quote(self, snapshots: Snapshots):
+        strategy_codes = self.positions.get_position_strategy_codes()
+        for strategy_id, code in strategy_codes:
+            if self.is_running_signal(strategy_id, code):
+                continue
+            snapshot = snapshots.get_snapshot(code)
+            if snapshot.dt <= get_tpe_datetime() - dt.timedelta(
+                seconds=self.quote_delay_tolerance
+            ):
+                continue
 
-                if snapshots[code].dt <= get_tpe_datetime() - dt.timedelta(
-                    seconds=self.quote_delay_tolerance
-                ):
-                    continue
-                
-                # skip matching order
-                if snapshots[code].total_volume == 0:
-                    continue
-                if snapshots[code].volume == 0:
-                    continue
-
-                self.exit_by_days_profit_limit(
-                    self.strategies[strategy_id], position, snapshots[code]
-                )
-                self.exit_by_take_profit(
-                    self.strategies[strategy_id], position, snapshots[code]
-                )
-                self.exit_by_stop_loss(
-                    self.strategies[strategy_id], position, snapshots[code]
-                )
+            # skip matching order
+            if snapshot.total_volume == 0:
+                continue
+            if snapshot.volume == 0:
+                continue
+            strategy = self.strategies.get_strategy(strategy_id)
+            position = self.positions.get_position(strategy_id, code)
+            self.exit_by_days_profit_limit(strategy, position, snapshot)
+            self.exit_by_take_profit(strategy, position, snapshot)
+            self.exit_by_stop_loss(strategy, position, snapshot)
 
     def before_market_signals(self):
-        for strategy_id, d0 in self.positions.items():
-            for code, position in d0.items():
-                if self.is_running_signal(strategy_id, code):
-                    continue
+        strategy_codes = self.positions.get_position_strategy_codes()
+        for strategy_id, code in strategy_codes:
+            if self.is_running_signal(strategy_id, code):
+                continue
+            strategy = self.strategies.get_strategy(strategy_id)
+            position = self.positions.get_position(strategy_id, code)
+            self.exit_by_out_date(strategy, position)
 
-                self.exit_by_out_date(self.strategies[strategy_id], position)
+    def system_check(self) -> bool:
+        if not is_trade_date():
+            return False
+        if not self.contracts.check_updated():
+            return False
+        if not self.positions.check_updated():
+            return False
+        if not self.strategies.check_updated():
+            return False
+        return True
 
     def run(self):
         logger.info("Start Exit Handler")
         while not self.active_event.isSet():
             try:
-                if not is_trade_date():
-                    time.sleep(10)
-                    continue
-                
-                if not is_latest_contracts(self.contracts):
-                    logger.warning("contracts outdated")
+                if not self.system_check():
                     time.sleep(10)
                     continue
 
@@ -222,5 +225,6 @@ class ExitHandler:
 
             except Exception as e:
                 logger.exception(e)
+
             time.sleep(0.01)
         logger.info("Shutdown Exit Handler")

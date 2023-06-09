@@ -10,11 +10,12 @@ from bunny_order.models import (
     QuoteSnapshot,
     Action,
 )
+from bunny_order.common import Positions, Strategies, Contracts, Snapshots
 
 
 @pytest.fixture()
 def positions() -> Dict[str, Dict[str, Position]]:
-    return {
+    data = {
         1: {
             "2836": Position(
                 strategy=1,
@@ -103,11 +104,14 @@ def positions() -> Dict[str, Dict[str, Position]]:
             )
         },
     }
+    positions = Positions()
+    positions.update(data)
+    return positions
 
 
 @pytest.fixture()
 def strategies() -> Dict[int, Strategy]:
-    return {
+    data = {
         2: Strategy(
             id=2,
             name="注意股10日多",
@@ -214,11 +218,14 @@ def strategies() -> Dict[int, Strategy]:
             exit_dp_profit_limit=None,
         ),
     }
+    strategies = Strategies()
+    strategies.update(data)
+    return strategies
 
 
 @pytest.fixture()
 def contracts() -> Dict[str, Contract]:
-    return {
+    data = {
         "3029": Contract(
             code="3029",
             name="零壹",
@@ -292,11 +299,14 @@ def contracts() -> Dict[str, Contract]:
             day_trade=True,
         ),
     }
+    contracts = Contracts()
+    contracts.update(data)
+    return contracts
 
 
 @pytest.fixture()
 def snapshots() -> Dict[str, QuoteSnapshot]:
-    return {
+    data = {
         "2836": QuoteSnapshot(
             dt=datetime.datetime(2023, 5, 26, 14, 30),
             code="2836",
@@ -442,3 +452,7 @@ def snapshots() -> Dict[str, QuoteSnapshot]:
             sell_volume=4,
         ),
     }
+
+    snapshots = Snapshots()
+    snapshots.update(data)
+    return snapshots

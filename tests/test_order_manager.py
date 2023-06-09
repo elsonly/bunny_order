@@ -19,6 +19,7 @@ from bunny_order.models import (
     RMRejectReason,
 )
 from bunny_order.config import Config
+from bunny_order.common import Positions, Strategies, Contracts, Snapshots
 
 
 @pytest.fixture(name="order_manager")
@@ -77,10 +78,10 @@ def test_cancel_order(order_manager: OrderManager):
 
 def test_price_order_low_ratio_adjustment(
     order_manager: OrderManager,
-    strategies: Dict[int, Strategy],
+    strategies: Strategies,
     signal: Signal,
 ):
-    strategies[signal.strategy_id].order_low_ratio = -2.35
+    strategies.get_strategy(signal.strategy_id).order_low_ratio = -2.35
     expected = Decimal("43.00")
 
     assert order_manager.price_order_low_ratio_adjustment(signal) == expected
@@ -101,7 +102,7 @@ def test_excute_pre_market_orders(
     freezer,
     mocker: MockerFixture,
     order_manager: OrderManager,
-    strategies: Dict[int, Strategy],
+    strategies: Strategies,
     signal: Signal,
 ):
     m_place_order = mocker.patch.object(order_manager, "place_order")

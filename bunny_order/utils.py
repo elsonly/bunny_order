@@ -3,6 +3,7 @@ import sys
 from loguru import logger
 from datetime import datetime, timedelta
 import datetime as dt
+import threading
 from functools import wraps
 from decimal import Decimal, ROUND_HALF_UP
 import json
@@ -10,7 +11,7 @@ import uuid
 from typing import Dict
 
 from bunny_order.config import Config
-from bunny_order.models import Contract
+from bunny_order.models import Contract, Position, Strategy
 
 
 if not os.path.exists(Config.LOGURU_SINK_DIR):
@@ -90,6 +91,10 @@ def is_before_market_signal_time() -> bool:
     )
 
 
+def is_signal_time() -> bool:
+    return Config.DEBUG or (get_tpe_datetime().time() < Config.SIGNAL_TIME)
+
+
 def is_trade_time() -> bool:
     return Config.DEBUG or (
         get_tpe_datetime().time() >= Config.TRADE_START_TIME
@@ -112,9 +117,51 @@ def get_next_schedule_time(dtime: dt.time) -> dt.datetime:
     return next_dt
 
 
-def is_latest_contracts(contracts: Dict[str, Contract]) -> bool:
-    for code in ["0050", "00878", "2330", "2317"]:
-        if code in contracts:
-            if contracts[code].update_date != get_tpe_datetime().date():
-                return False
-    return True
+class ReadWriteLock:
+    """A lock object that allows many simultaneous "read locks", but
+    only one "write lock." """
+
+    def __init__(self):
+        self._read_ready = threading.Condition(threading.Lock())
+        self._readers = 0
+
+    def acquire_read(self):
+        """Acquire a read lock. Blocks only if a thread has
+        acquired the write lock."""
+        self._read_ready.acquire()
+        try:
+            self._readers += 1
+        finally:
+            self._read_ready.release()
+
+    def release_read(self):
+        """Release a read lock."""
+        self._read_ready.acquire()
+        try:
+            self._readers -= 1
+            if not self._readers:
+                self._read_ready.notifyAll()
+        finally:
+            self._read_ready.release()
+
+    def acquire_write(self):
+        """Acquire a write lock. Blocks until there are no
+        acquired read or write locks."""
+        self._read_ready.acquire()
+        counter = 0
+        while self._readers > 0:
+            self._read_ready.wait(10)
+            counter += 1
+            if counter > 5:
+                logger.error("lock not release")
+
+    def release_write(self):
+        """Release a write lock."""
+        self._read_ready.release()
+
+
+lock = ReadWriteLock()
+
+lock.acquire_write()
+lock.release_write()
+lock.acquire_read()

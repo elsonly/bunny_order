@@ -8,15 +8,16 @@ from bunny_order.models import (
     RMRejectReason,
     SignalSource,
 )
-from bunny_order.utils import logger, get_tpe_datetime
+from bunny_order.common import Strategies, Contracts
+from bunny_order.utils import logger
 from bunny_order.config import Config
 
 
 class RiskManager:
     def __init__(
         self,
-        strategies: Dict[int, Strategy],
-        contracts: Dict[str, Contract],
+        strategies: Strategies,
+        contracts: Contracts,
     ):
         self.strategies = strategies
         self.contracts = contracts
@@ -43,11 +44,11 @@ class RiskManager:
         signal.rm_validated = True
 
     def _validate_latest_contract(self, signal: Signal) -> bool:
-        if signal.code not in self.contracts:
+        if not self.contracts.exists(signal.code):
             logger.warning(f"contract not found: {signal.code}")
             return False
 
-        if self.contracts[signal.code].update_date != get_tpe_datetime().date():
+        if not self.contracts.check_updated([signal.code]):
             logger.warning(f"contract outdated: {signal.code}")
             return False
 
@@ -58,7 +59,7 @@ class RiskManager:
         return True
 
     def _validate_strategy(self, signal: Signal) -> bool:
-        if signal.strategy_id not in self.strategies:
+        if not self.strategies.exists(signal.strategy_id):
             signal.rm_reject_reason = RMRejectReason.StrategyNotFound
             logger.warning(f"reject signal: {signal}")
             return False
@@ -66,7 +67,8 @@ class RiskManager:
 
     def qty_leverage_ratio_adjustment(self, signal: Signal) -> int:
         signal.quantity = int(
-            signal.quantity * self.strategies[signal.strategy_id].leverage_ratio
+            signal.quantity
+            * self.strategies.get_strategy(signal.strategy_id).leverage_ratio
         )
 
     def _validate_trade_datetime(self, signal: Signal) -> bool:

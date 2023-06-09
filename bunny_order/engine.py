@@ -12,6 +12,7 @@ from bunny_order.utils import (
     is_trade_time,
     is_trade_date,
     get_next_schedule_time,
+    is_signal_time,
 )
 from bunny_order.database.data_manager import DataManager
 from bunny_order.order_observer import OrderObserver
@@ -31,6 +32,7 @@ from bunny_order.config import Config
 from bunny_order.order_manager import OrderManager
 from bunny_order.exit_handler import ExitHandler
 from bunny_order.risk_manager import RiskManager
+from bunny_order.common import Strategies, Snapshots, Positions, Contracts
 
 
 class Engine:
@@ -38,12 +40,13 @@ class Engine:
         self,
         debug: int,
         sync_interval: int,
+        snapshot_interval: int,
     ):
         self.dm = DataManager()
-        self.strategies: Dict[int, Strategy] = {}
-        self.snapshots: Dict[str, QuoteSnapshot] = {}
-        self.positions: Dict[int, Dict[str, Position]] = {}
-        self.contracts: Dict[str, Contract] = {}
+        self.strategies = Strategies()
+        self.snapshots = Snapshots()
+        self.positions = Positions()
+        self.contracts = Contracts()
         self.unhandled_orders: Deque[SF31Order] = deque()
         # order_id -> Order
         self.order_callbacks: Dict[str, Order] = {}
@@ -73,7 +76,8 @@ class Engine:
         ] = deque()
 
         self.observer = OrderObserver(
-            strategies=self.strategies, q_out=self.q_order_observer_out
+            strategies=self.strategies,
+            q_out=self.q_order_observer_out,
         )
 
         # exit handler
@@ -101,6 +105,7 @@ class Engine:
 
         self.active = False
         self.sync_interval = sync_interval
+        self.snapshot_interval = snapshot_interval
         self.debug = debug
         self.init_checkpoints()
 
@@ -170,18 +175,27 @@ class Engine:
         self.dm.save_positions(positions)
 
     def sync(self):
-        self.strategies.update(self.dm.get_strategies())
-        self.positions.update(self.dm.get_positions())
+        self.update_strategies()
+        self.update_positions()
+        if is_trade_date() and not self.contracts.check_updated():
+            self.update_contracts()
+
+    def update_positions(self):
+        positions = self.dm.get_positions()
+        self.positions.update(positions)
+
+    def update_strategies(self):
+        strategies = self.dm.get_strategies()
+        self.strategies.update(strategies)
 
     def update_contracts(self):
-        self.contracts.update(self.dm.get_contracts())
+        contracts = self.dm.get_contracts()
+        self.contracts.update(contracts)
 
     def update_snapshots(self):
-        codes = []
-        for strategy_id in self.positions:
-            codes.extend(list(self.positions[strategy_id]))
-        self.snapshots.clear()
-        self.snapshots.update(self.dm.get_quote_snapshots(codes))
+        codes = self.positions.get_position_codes()
+        snapshots = self.dm.get_quote_snapshots(codes)
+        self.snapshots.update(snapshots)
 
     def reset(self):
         logger.info("reset")
@@ -219,49 +233,62 @@ class Engine:
         self.observer.reset_checkpoints()
         self.exit_handler.reset()
 
+    def init_timer(self):
+        self._prev_sync_ts = 0.0
+        self._prev_snapshot_ts = 0.0
+        self._next_reset_dt1 = get_next_schedule_time(Config.RESET_TIME1)
+        self._next_reset_dt2 = get_next_schedule_time(Config.RESET_TIME2)
+
+    def run_schedule_job(self):
+        # schedule
+        cur_dt = get_tpe_datetime()
+        if cur_dt >= self._next_reset_dt1:
+            self.reset()
+            self.sync()
+            self._next_reset_dt1 += dt.timedelta(days=1)
+
+        if cur_dt >= self._next_reset_dt2:
+            self.reset()
+            self.sync()
+            self._next_reset_dt2 += dt.timedelta(days=1)
+
+        # interval
+        if is_trade_date() and is_trade_time():
+            if time.time() - self._prev_sync_ts > self.sync_interval:
+                self.sync()
+                self._prev_sync_ts = time.time()
+
+            if time.time() - self._prev_snapshot_ts > self.snapshot_interval:
+                self.update_snapshots()
+                self.exit_handler.q_in.append((Event.Quote, self.snapshots))
+                self._prev_snapshot_ts = time.time()
+
+    def system_check(self) -> bool:
+        if not is_signal_time():
+            return False
+        if not self.contracts.check_updated():
+            return False
+        if not self.positions.check_updated():
+            return False
+        if not self.strategies.check_updated():
+            return False
+        return True
+
     def run(self):
         logger.info("Start Engine")
+        self.init_timer()
         self.sync()
-        self.update_contracts()
         self.observer.start()
         self.__thread_om.start()
         self.__thread_exit_handler.start()
-        prev_sync_ts = 0
-
-        next_reset_dt1 = get_next_schedule_time(Config.RESET_TIME1)
-        next_reset_dt2 = get_next_schedule_time(Config.RESET_TIME2)
-        next_update_contracts_dt = get_next_schedule_time(Config.UPDATE_CONTRACTS_TIME)
 
         self.active = True
         while self.active:
             try:
-                cur_dt = get_tpe_datetime()
-                if cur_dt >= next_reset_dt1:
-                    self.reset()
-                    next_reset_dt1 += dt.timedelta(days=1)
-                    
-                if cur_dt >= next_reset_dt2:
-                    self.reset()
-                    next_reset_dt2 += dt.timedelta(days=1)
-
-                if cur_dt.time() < Config.SIGNAL_TIME:
+                self.run_schedule_job()
+                if not self.system_check():
                     time.sleep(10)
                     continue
-
-                if cur_dt >= next_update_contracts_dt:
-                    self.update_contracts()
-                    next_update_contracts_dt += dt.timedelta(days=1)
-
-                ts = time.time()
-                if (
-                    ts - prev_sync_ts > self.sync_interval
-                    and is_trade_date()
-                    and is_trade_time()
-                ):
-                    self.sync()
-                    self.update_snapshots()
-                    self.exit_handler.q_in.append((Event.Quote, self.snapshots))
-                    prev_sync_ts = ts
 
                 for _ in range(len(self.unhandled_order_callbacks)):
                     retry_counter, order = self.unhandled_order_callbacks.popleft()

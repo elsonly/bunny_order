@@ -30,6 +30,7 @@ from bunny_order.models import (
     SecurityType,
     Trade,
 )
+from bunny_order.common import Strategies
 
 
 class FileEventHandler(FileSystemEventHandler):
@@ -65,7 +66,7 @@ class FileEventHandler(FileSystemEventHandler):
 
 
 class OrderEventHandler(FileEventHandler):
-    def __init__(self, strategies: Dict[int, Strategy], listen_path: str):
+    def __init__(self, strategies: Strategies, listen_path: str):
         super().__init__()
         self.strategies = strategies
         self.listen_path = listen_path
@@ -142,18 +143,12 @@ class OrderEventHandler(FileEventHandler):
     def get_seqno(self):
         return uuid.uuid4().hex[:12]
 
-    def get_strategy_id(self, strategy_name: str) -> int:
-        for _id, strategy in self.strategies.items():
-            if strategy_name == strategy.name:
-                return strategy.id
-        return 0
-    
     def on_sf31_orders(self, strategy: str, data: List[str]):
         """
         data (list):
             ex: ['A15,Stock,1684852278.968826,2882,ROD,B,10,47.65']
         """
-        strategy_id = self.get_strategy_id(strategy)
+        strategy_id = self.strategies.get_id(strategy)
         if strategy_id == 0:
             return
         for raw_order in data:
@@ -239,7 +234,8 @@ class OrderManager:
         self,
     ):
         self.dm = DataManager()
-        self.strategies: Dict[int, Strategy] = self.dm.get_strategies()
+        self.strategies = Strategies()
+        self.strategies.update(self.dm.get_strategies())
         self.observer = Observer()
         self.observer.setDaemon(True)
         if not os.path.exists(Config.OBSERVER_BASE_PATH):
@@ -261,5 +257,9 @@ class OrderManager:
     def run(self):
         self.observer.start()
         logger.info("start")
+        prev_update_ts = 0
         while True:
+            if time.time() - prev_update_ts > 10:
+                self.strategies.update(self.dm.get_strategies())
+                prev_update_ts = time.time()
             time.sleep(1)

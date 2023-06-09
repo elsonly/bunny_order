@@ -2,7 +2,7 @@ import os
 import re
 import json
 from typing import Dict, Tuple, DefaultDict, List, Deque, Union
-from collections import defaultdict
+from collections import defaultdict, deque
 import pandas as pd
 from watchdog.observers.polling import PollingObserver
 from watchdog.events import (
@@ -22,6 +22,7 @@ from bunny_order.utils import (
     get_signal_id,
     dump_checkpoints,
     load_checkpoints,
+    ReadWriteLock,
 )
 from bunny_order.models import (
     Signal,
@@ -36,6 +37,7 @@ from bunny_order.models import (
     PriceType,
     SignalSource,
 )
+from bunny_order.common import Strategies
 
 
 class FileEventHandler(FileSystemEventHandler):
@@ -73,8 +75,10 @@ class FileEventHandler(FileSystemEventHandler):
 class XQSignalEventHandler(FileEventHandler):
     def __init__(
         self,
-        strategies: Dict[int, Strategy],
-        q_out: Deque[Tuple[Event, Union[Signal, Order, Trade, List[SF31Position]]]],
+        strategies: Strategies,
+        q_out: Deque[
+            Tuple[Event, Union[Signal, Order, Trade, List[SF31Position]]]
+        ] = deque(),
     ):
         super().__init__()
         self.strategies = strategies
@@ -94,11 +98,11 @@ class XQSignalEventHandler(FileEventHandler):
             logger.info("file created:{0}".format(event.src_path))
             if event.src_path.endswith(".swp"):
                 return
-            
+
             date_, strategy = self.parse_file(event.src_path)
             if date_ == "" or strategy == "":
                 return
-            
+
             with open(event.src_path, "r", encoding="utf-8") as f:
                 data = [x.split() for x in f.readlines()]
 
@@ -143,12 +147,6 @@ class XQSignalEventHandler(FileEventHandler):
         strategy = "_".join(split_data[1:])
         return date_, strategy
 
-    def get_strategy_id(self, strategy_name: str) -> int:
-        for _id, strategy in self.strategies.items():
-            if strategy_name == strategy.name:
-                return strategy.id
-        return 0
-
     def convert_to_signals(self, date: str, strategy: str, data: list) -> List[Signal]:
         """
         date (str): %Y%m%d
@@ -173,7 +171,7 @@ class XQSignalEventHandler(FileEventHandler):
                 source=SignalSource.XQ,
                 sdate=pd.to_datetime(date).date(),
                 stime=stime,
-                strategy_id=self.get_strategy_id(strategy),
+                strategy_id=self.strategies.get_id(strategy),
                 security_type=SecurityType.Stock,
                 code=x[1].split(".")[0],
                 order_type=OrderType(x[2]),
@@ -196,7 +194,7 @@ class XQSignalEventHandler(FileEventHandler):
             ex: ["173749 2882.TW ROD B 20 47.65"]
         """
         logger.info(f"date: {date}, strategy: {strategy}, data: {data}")
-        if self.get_strategy_id(strategy) == 0:
+        if self.strategies.get_id(strategy) == 0:
             return
         signals = self.convert_to_signals(date, strategy, data)
         logger.info(f"signals: {signals}")
@@ -413,8 +411,10 @@ class OrderCallbackEventHandler(FileEventHandler):
 class OrderObserver:
     def __init__(
         self,
-        strategies: Dict[int, Strategy],
-        q_out: Deque[Tuple[Event, Union[Signal, Order, Trade, List[SF31Position]]]],
+        strategies: Strategies,
+        q_out: Deque[
+            Tuple[Event, Union[Signal, Order, Trade, List[SF31Position]]]
+        ] = deque(),
     ):
         self.observer = PollingObserver()
         self.observer.setDaemon(True)
@@ -431,7 +431,9 @@ class OrderObserver:
             os.mkdir(xq_signals_path)
 
         logger.info(f"listen to folder: {xq_signals_path}")
-        self.xq_signal_event_handler = XQSignalEventHandler(strategies, q_out=q_out)
+        self.xq_signal_event_handler = XQSignalEventHandler(
+            strategies=strategies, q_out=q_out
+        )
         self.observer.schedule(self.xq_signal_event_handler, xq_signals_path, False)
 
         # OrderCallbackEvent

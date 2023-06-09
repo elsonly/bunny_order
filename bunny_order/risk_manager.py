@@ -8,7 +8,7 @@ from bunny_order.models import (
     RMRejectReason,
     SignalSource,
 )
-from bunny_order.common import Strategies, Contracts
+from bunny_order.common import Strategies, Contracts, Positions
 from bunny_order.utils import logger
 from bunny_order.config import Config
 
@@ -18,9 +18,11 @@ class RiskManager:
         self,
         strategies: Strategies,
         contracts: Contracts,
+        positions: Positions,
     ):
         self.strategies = strategies
         self.contracts = contracts
+        self.positions = positions
         self.daily_amount_limit = Config.OM_DAILY_AMOUNT_LIMIT
         self.cumulative_amount = 0
 
@@ -52,6 +54,14 @@ class RiskManager:
             logger.warning(f"contract outdated: {signal.code}")
             return False
 
+        return True
+
+    def _validate_raise(self, signal: Signal) -> bool:
+        if not self.strategies.get_strategy(signal.strategy_id).enable_raise:
+            if self.positions.exists(signal.strategy_id, signal.code):
+                signal.rm_reject_reason = RMRejectReason.DisableRaise
+                logger.warning(f"reject signal: {signal}")
+                return False
         return True
 
     def _validate_dividend_date(self, signal: Signal) -> bool:

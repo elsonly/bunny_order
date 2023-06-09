@@ -101,6 +101,7 @@ class Engine:
         self.rm = RiskManager(
             strategies=self.strategies,
             contracts=self.contracts,
+            positions=self.positions,
         )
 
         self.active = False

@@ -45,6 +45,7 @@ class RMRejectReason(str, Enum):
     InsufficientUnit = "InsufficientUnit"
     StrategyAmountExceeded = "StrategyAmountExceeded"
     DailyTransactionAmountExceeded = "DailyTransactionAmountExceeded"
+    DisableRaise = "DisableRaise"
 
 class Event(Enum):
     OrderCallback = 1
@@ -56,8 +57,10 @@ class Event(Enum):
 class Strategy(BaseModel):
     id: int
     name: str
+    factor: Optional[str]
     add_date: Optional[dt.date]
     status: bool
+    enable_raise: bool
     leverage_ratio: Optional[float]
     expected_mdd: Optional[float]
     expected_daily_return: Optional[float]

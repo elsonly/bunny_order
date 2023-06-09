@@ -156,6 +156,13 @@ class Positions:
         ]
         return data
 
+    def exists(self, strategy_id: int, code: str) -> bool:
+        self._check_latest()
+        if strategy_id in self._data:
+            if code in self._data[strategy_id]:
+                return True
+        return False
+
     def get_position(self, strategy_id: int, code: str) -> Position:
         self._check_latest()
         if strategy_id in self._data:

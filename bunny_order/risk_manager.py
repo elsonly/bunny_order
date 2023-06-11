@@ -82,7 +82,12 @@ class RiskManager:
         )
 
     def _validate_trade_datetime(self, signal: Signal) -> bool:
-        return signal.sdate.weekday() < 5
+        if Config.DEBUG:
+            return True
+        if signal.sdate.weekday() < 5:
+            signal.rm_reject_reason = RMRejectReason.InvalidTradeHour
+            return False
+        return True
 
     def _validate_quantity_unit(self, signal: Signal) -> bool:
         if signal.quantity < 1:

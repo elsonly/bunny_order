@@ -56,6 +56,7 @@ class ExitHandler:
 
     def reset(self):
         self.running_signals.clear()
+        dump_checkpoints(self.checkpoints_path, self.running_signals)
 
     def send_exit_signal(self, position: Position, exit_type: ExitType):
         signal = Signal(

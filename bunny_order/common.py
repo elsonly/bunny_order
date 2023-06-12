@@ -190,7 +190,7 @@ class Contracts:
             raise Exception(f"contract outdated: {code}")
 
     def check_updated(
-        self, codes: List[str] = ["0050", "00878", "2330", "2317"]
+        self, codes: List[str] = ["0050", "2330", "2317"]
     ) -> bool:
         result = True
         try:
@@ -202,8 +202,6 @@ class Contracts:
                             result = True
                         else:
                             result = False
-                else:
-                    result = False
         finally:
             self.lock.release_read()
         return result

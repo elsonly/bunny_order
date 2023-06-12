@@ -42,6 +42,16 @@ class BaseConfig:
         minute=int(config_yaml["engine"]["trade_end_time"][2:4]),
         second=0,
     )
+    SYNC_START_TIME = dt.time(
+        hour=int(config_yaml["engine"]["sync_start_time"][:2]),
+        minute=int(config_yaml["engine"]["sync_start_time"][2:4]),
+        second=0,
+    )
+    SYNC_END_TIME = dt.time(
+        hour=int(config_yaml["engine"]["sync_end_time"][:2]),
+        minute=int(config_yaml["engine"]["sync_end_time"][2:4]),
+        second=0,
+    )
     UPDATE_CONTRACTS_TIME = dt.time(
         hour=int(config_yaml["engine"]["update_contracts_time"][:2]),
         minute=int(config_yaml["engine"]["update_contracts_time"][2:4]),
@@ -63,9 +73,7 @@ class BaseConfig:
         second=0,
     )
     # exit handler
-    QUOTE_DELAY_TOLERANCE = int(
-        config_yaml["exit_handler"]["quote_delay_tolerance"]
-    )
+    QUOTE_DELAY_TOLERANCE = int(config_yaml["exit_handler"]["quote_delay_tolerance"])
     CHECKPOINTS_DIR = config_yaml["common"]["checkpoints_dir"]
     # order manager
     OM_DAILY_AMOUNT_LIMIT = config_yaml["order_manager"]["daily_amount_limit"]

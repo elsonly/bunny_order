@@ -27,7 +27,7 @@ from bunny_order.utils import (
     load_checkpoints,
     is_trade_date,
     is_trade_time,
-    is_before_market_signal_time,
+    is_signal_time,
 )
 from bunny_order.common import Strategies, Snapshots, Positions, Contracts
 from bunny_order.config import Config
@@ -169,11 +169,8 @@ class ExitHandler:
             if self.is_running_signal(strategy_id, code):
                 continue
             snapshot = snapshots.get_snapshot(code)
-            if snapshot.dt <= get_tpe_datetime() - dt.timedelta(
-                seconds=self.quote_delay_tolerance
-            ):
+            if (get_tpe_datetime() - snapshot.dt).seconds > self.quote_delay_tolerance:
                 continue
-
             # skip matching order
             if snapshot.total_volume == 0:
                 continue
@@ -221,7 +218,7 @@ class ExitHandler:
                     else:
                         logger.warning(f"Invalid event: {event}")
 
-                if is_before_market_signal_time():
+                if is_signal_time():
                     self.before_market_signals()
 
             except Exception as e:

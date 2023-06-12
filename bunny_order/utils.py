@@ -84,15 +84,18 @@ def load_checkpoints(path: str) -> dict:
     return data
 
 
-def is_before_market_signal_time() -> bool:
+def is_signal_time() -> bool:
     return Config.DEBUG or (
         get_tpe_datetime().time() >= Config.SIGNAL_TIME
-        and get_tpe_datetime().time() < Config.TRADE_START_TIME
+        and get_tpe_datetime().time() < Config.TRADE_END_TIME
     )
 
 
-def is_signal_time() -> bool:
-    return Config.DEBUG or (get_tpe_datetime().time() < Config.SIGNAL_TIME)
+def is_sync_time() -> bool:
+    return Config.DEBUG or (
+        get_tpe_datetime().time() >= Config.SYNC_START_TIME
+        and get_tpe_datetime().time() <= Config.SYNC_END_TIME
+    )
 
 
 def is_trade_time() -> bool:

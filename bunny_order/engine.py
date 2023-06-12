@@ -13,6 +13,7 @@ from bunny_order.utils import (
     is_trade_date,
     get_next_schedule_time,
     is_signal_time,
+    is_sync_time,
 )
 from bunny_order.database.data_manager import DataManager
 from bunny_order.order_observer import OrderObserver
@@ -178,7 +179,9 @@ class Engine:
     def sync(self):
         self.update_strategies()
         self.update_positions()
-        if is_trade_date() and not self.contracts.check_updated():
+        if not self.contracts.update_dt or (
+            is_trade_date() and not self.contracts.check_updated()
+        ):
             self.update_contracts()
 
     def update_positions(self):
@@ -254,12 +257,15 @@ class Engine:
             self._next_reset_dt2 += dt.timedelta(days=1)
 
         # interval
-        if is_trade_date() and is_trade_time():
-            if time.time() - self._prev_sync_ts > self.sync_interval:
+        if is_trade_date():
+            if is_sync_time() and time.time() - self._prev_sync_ts > self.sync_interval:
                 self.sync()
                 self._prev_sync_ts = time.time()
 
-            if time.time() - self._prev_snapshot_ts > self.snapshot_interval:
+            if (
+                is_trade_time()
+                and time.time() - self._prev_snapshot_ts > self.snapshot_interval
+            ):
                 self.update_snapshots()
                 self.exit_handler.q_in.append((Event.Quote, self.snapshots))
                 self._prev_snapshot_ts = time.time()

@@ -17,12 +17,14 @@ base: &base
     signal_time: "0820"
     trade_start_time: "0840"
     trade_end_time: "1430"
+    sync_start_time: "0750"
+    sync_end_time: "1500"
     update_contracts_time: "0815"
     reset_time1: "0750"
     reset_time2: "1500"
 
   exit_handler:
-    quote_delay_tolerance: 60
+    quote_delay_tolerance: 120
 
   order_manager:
     daily_amount_limit: 10000000

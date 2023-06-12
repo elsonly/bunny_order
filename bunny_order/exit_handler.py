@@ -195,10 +195,22 @@ class ExitHandler:
         if not is_trade_date():
             return False
         if not self.contracts.check_updated():
+            if is_trade_time():
+                logger.warning(
+                    f"contracts not updated, previous update time: {self.contracts.update_dt}"
+                )
             return False
         if not self.positions.check_updated():
+            if is_trade_time():
+                logger.warning(
+                    f"positions not updated, previous update time: {self.positions.update_dt}"
+                )
             return False
         if not self.strategies.check_updated():
+            if is_trade_time():
+                logger.warning(
+                    f"strategies not updated, previous update time: {self.strategies.update_dt}"
+                )
             return False
         return True
 

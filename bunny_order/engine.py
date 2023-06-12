@@ -224,6 +224,11 @@ class Engine:
             with open(trade_path, "r+") as f:
                 _ = f.truncate(0)
 
+        # position_path = f"{Config.OBSERVER_BASE_PATH}/{Config.OBSERVER_ORDER_CALLBACK_DIR}/{Config.OBSERVER_POSITION_CALLBACK_FILE}"
+        # if os.path.exists(position_path):
+        #     with open(position_path, "r+") as f:
+        #         _ = f.truncate(0)
+
         sf31_order_path = (
             f"{Config.OBSERVER_BASE_PATH}/{Config.OBSERVER_SF31_ORDERS_DIR}"
         )
@@ -274,10 +279,22 @@ class Engine:
         if not is_signal_time():
             return False
         if not self.contracts.check_updated():
+            if is_trade_time():
+                logger.warning(
+                    f"contracts not updated, previous update time: {self.contracts.update_dt}"
+                )
             return False
         if not self.positions.check_updated():
+            if is_trade_time():
+                logger.warning(
+                    f"positions not updated, previous update time: {self.positions.update_dt}"
+                )
             return False
         if not self.strategies.check_updated():
+            if is_trade_time():
+                logger.warning(
+                    f"strategies not updated, previous update time: {self.strategies.update_dt}"
+                )
             return False
         return True
 

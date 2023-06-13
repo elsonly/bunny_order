@@ -73,6 +73,12 @@ class RiskManager:
             signal.rm_reject_reason = RMRejectReason.StrategyNotFound
             logger.warning(f"reject signal: {signal}")
             return False
+        
+        if not self.strategies.get_strategy(signal.strategy_id).status:
+            signal.rm_reject_reason = RMRejectReason.StrategyInactive
+            logger.warning(f"reject signal: {signal}")
+            return False
+            
         return True
 
     def qty_leverage_ratio_adjustment(self, signal: Signal) -> int:
@@ -84,7 +90,7 @@ class RiskManager:
     def _validate_trade_datetime(self, signal: Signal) -> bool:
         if Config.DEBUG:
             return True
-        if signal.sdate.weekday() < 5:
+        if signal.sdate.weekday() >= 5:
             signal.rm_reject_reason = RMRejectReason.InvalidTradeHour
             return False
         return True

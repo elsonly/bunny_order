@@ -47,6 +47,7 @@ class RMRejectReason(str, Enum):
     DailyTransactionAmountExceeded = "DailyTransactionAmountExceeded"
     DisableRaise = "DisableRaise"
     InvalidTradeHour = "InvalidTradeHour"
+    StrategyInactive = "StrategyInactive"
 
 class Event(Enum):
     OrderCallback = 1

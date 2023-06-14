@@ -1,7 +1,13 @@
 from typing import Dict, List, Tuple
 import datetime as dt
 
-from bunny_order.models import Strategy, Position, Contract, QuoteSnapshot
+from bunny_order.models import (
+    Strategy,
+    Position,
+    Contract,
+    QuoteSnapshot,
+    ComingDividend,
+)
 from bunny_order.utils import ReadWriteLock, get_tpe_datetime
 from bunny_order.config import Config
 
@@ -189,9 +195,7 @@ class Contracts:
         if not self.check_updated([code]):
             raise Exception(f"contract outdated: {code}")
 
-    def check_updated(
-        self, codes: List[str] = ["0050", "2330", "2317"]
-    ) -> bool:
+    def check_updated(self, codes: List[str] = ["0050", "2330", "2317"]) -> bool:
         result = True
         try:
             self.lock.acquire_read()
@@ -214,3 +218,39 @@ class Contracts:
         if code in self._data:
             return self._data[code]
         raise Exception(f"cannot find contract: {code}")
+
+
+class ComingDividends:
+    def __init__(self):
+        self._data: Dict[str, ComingDividend] = {}
+        self.lock = ReadWriteLock()
+        self.update_dt: dt.datetime = None
+
+    def update(self, data: Dict[int, ComingDividend]):
+        self.lock.acquire_write()
+        self._data.clear()
+        self._data.update(data)
+        self.lock.release_write()
+        self.update_dt = get_tpe_datetime()
+
+    def _check_latest(self):
+        if not self.check_updated():
+            raise Exception(
+                f"coming_dividend outdated, previous update time: {self.update_dt}"
+            )
+
+    def check_updated(self) -> bool:
+        if self.update_dt is None or (
+            get_tpe_datetime().date() != self.update_dt.date()
+        ):
+            return False
+        return True
+
+    def exists(self, code: str) -> bool:
+        return code in self._data
+
+    def get_coming_dividend(self, code: str) -> ComingDividend:
+        self._check_latest()
+        if code in self._data:
+            return self._data[code]
+        raise Exception(f"cannot find coming_dividend: {code}")

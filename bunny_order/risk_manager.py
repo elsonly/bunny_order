@@ -1,5 +1,6 @@
 from typing import Union, List, Deque, Dict
 from decimal import Decimal
+import pandas as pd
 
 from bunny_order.models import (
     Contract,
@@ -8,8 +9,8 @@ from bunny_order.models import (
     RMRejectReason,
     SignalSource,
 )
-from bunny_order.common import Strategies, Contracts, Positions
-from bunny_order.utils import logger
+from bunny_order.common import Strategies, Contracts, Positions, ComingDividends
+from bunny_order.utils import logger, get_tpe_datetime
 from bunny_order.config import Config
 
 
@@ -19,10 +20,12 @@ class RiskManager:
         strategies: Strategies,
         contracts: Contracts,
         positions: Positions,
+        coming_dividends: ComingDividends,
     ):
         self.strategies = strategies
         self.contracts = contracts
         self.positions = positions
+        self.coming_dividends = coming_dividends
         self.daily_amount_limit = Config.OM_DAILY_AMOUNT_LIMIT
         self.cumulative_amount = 0
 
@@ -67,7 +70,19 @@ class RiskManager:
         return True
 
     def _validate_dividend_date(self, signal: Signal) -> bool:
-        # TODO
+        strategy = self.strategies.get_strategy(signal.strategy_id)
+        if (
+            strategy.holding_period
+            and self.coming_dividends.exists(signal.code)
+            and not strategy.enable_dividend
+        ):
+            coming_dividend = self.coming_dividends.get_coming_dividend(signal.code)
+            if (
+                get_tpe_datetime() + strategy.holding_period * pd.offsets.BDay()
+            ).date() >= coming_dividend.ex_date:
+                signal.rm_reject_reason = RMRejectReason.CannotParticipatingDividend
+                logger.warning(f"reject signal: {signal}")
+                return False
         return True
 
     def _validate_strategy(self, signal: Signal) -> bool:
@@ -75,12 +90,10 @@ class RiskManager:
             signal.rm_reject_reason = RMRejectReason.StrategyNotFound
             logger.warning(f"reject signal: {signal}")
             return False
-
         if not self.strategies.get_strategy(signal.strategy_id).status:
             signal.rm_reject_reason = RMRejectReason.StrategyInactive
             logger.warning(f"reject signal: {signal}")
             return False
-
         return True
 
     def qty_leverage_ratio_adjustment(self, signal: Signal):

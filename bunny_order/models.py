@@ -39,6 +39,7 @@ class ExitType(str, Enum):
     ExitByTakeProfit = "ExitByTakeProfit"
     ExitByStopLoss = "ExitByStopLoss"
 
+
 class RMRejectReason(str, Enum):
     NONE = ""
     StrategyNotFound = "StrategyNotFound"
@@ -48,6 +49,8 @@ class RMRejectReason(str, Enum):
     DisableRaise = "DisableRaise"
     InvalidTradeHour = "InvalidTradeHour"
     StrategyInactive = "StrategyInactive"
+    CannotParticipatingDividend = "CannotParticipatingDividend"
+
 
 class Event(Enum):
     OrderCallback = 1
@@ -56,6 +59,7 @@ class Event(Enum):
     Signal = 4
     Quote = 5
 
+
 class Strategy(BaseModel):
     id: int
     name: str
@@ -63,6 +67,7 @@ class Strategy(BaseModel):
     add_date: Optional[dt.date]
     status: bool
     enable_raise: bool
+    enable_dividend: bool
     leverage_ratio: Optional[float]
     expected_mdd: Optional[float]
     expected_daily_return: Optional[float]
@@ -188,3 +193,8 @@ class Contract(BaseModel):
     limit_down: Decimal
     update_date: Optional[dt.date]
     # day_trade: Optional[bool]
+
+
+class ComingDividend(BaseModel):
+    code: str
+    ex_date: dt.date

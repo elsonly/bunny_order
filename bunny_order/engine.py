@@ -33,7 +33,13 @@ from bunny_order.config import Config
 from bunny_order.order_manager import OrderManager
 from bunny_order.exit_handler import ExitHandler
 from bunny_order.risk_manager import RiskManager
-from bunny_order.common import Strategies, Snapshots, Positions, Contracts
+from bunny_order.common import (
+    Strategies,
+    Snapshots,
+    Positions,
+    Contracts,
+    ComingDividends,
+)
 
 
 class Engine:
@@ -48,6 +54,7 @@ class Engine:
         self.snapshots = Snapshots()
         self.positions = Positions()
         self.contracts = Contracts()
+        self.coming_dividends = ComingDividends()
         self.unhandled_orders: Deque[SF31Order] = deque()
         # order_id -> Order
         self.order_callbacks: Dict[str, Order] = {}
@@ -103,6 +110,7 @@ class Engine:
             strategies=self.strategies,
             contracts=self.contracts,
             positions=self.positions,
+            coming_dividends=self.coming_dividends,
         )
 
         self.active = False
@@ -179,10 +187,13 @@ class Engine:
     def sync(self):
         self.update_strategies()
         self.update_positions()
-        if not self.contracts.update_dt or (
-            is_trade_date() and not self.contracts.check_updated()
-        ):
-            self.update_contracts()
+        if is_trade_date():
+            if not self.contracts.update_dt or (not self.contracts.check_updated()):
+                self.update_contracts()
+            if not self.coming_dividends.update_dt or (
+                not self.coming_dividends.check_updated()
+            ):
+                self.update_coming_dividends()
 
     def update_positions(self):
         positions = self.dm.get_positions()
@@ -195,6 +206,10 @@ class Engine:
     def update_contracts(self):
         contracts = self.dm.get_contracts()
         self.contracts.update(contracts)
+
+    def update_coming_dividends(self):
+        coming_dividends = self.dm.get_coming_dividends()
+        self.coming_dividends.update(coming_dividends)
 
     def update_snapshots(self):
         codes = self.positions.get_position_codes()
@@ -282,6 +297,12 @@ class Engine:
             if is_trade_time():
                 logger.warning(
                     f"contracts not updated, previous update time: {self.contracts.update_dt}"
+                )
+            return False
+        if not self.coming_dividends.check_updated():
+            if is_trade_time():
+                logger.warning(
+                    f"coming_dividends not updated, previous update time: {self.coming_dividends.update_dt}"
                 )
             return False
         if not self.positions.check_updated():

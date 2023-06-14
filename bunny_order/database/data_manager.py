@@ -14,6 +14,7 @@ from bunny_order.models import (
     Position,
     QuoteSnapshot,
     Contract,
+    ComingDividend,
 )
 from bunny_order.database.tsdb_client import TSDBClient
 from bunny_order.config import Config
@@ -330,4 +331,14 @@ class DataManager:
         d = {}
         for row in data:
             d[row["code"]] = Contract(**row)
+        return d
+
+    def get_coming_dividends(self) -> Dict[str, ComingDividend]:
+        data = self.cli.execute_query(
+            """select code, ex_date from cmoney.v_coming_dividends;""",
+            "dict",
+        )
+        d = {}
+        for row in data:
+            d[row["code"]] = ComingDividend(**row)
         return d

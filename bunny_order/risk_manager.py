@@ -31,6 +31,8 @@ class RiskManager:
             return
         if signal.source == SignalSource.XQ:
             self.qty_leverage_ratio_adjustment(signal)
+            self.price_limit_adjustment(signal)
+
         if not self._validate_trade_datetime(signal):
             return
         if not self._validate_latest_contract(signal):
@@ -73,19 +75,28 @@ class RiskManager:
             signal.rm_reject_reason = RMRejectReason.StrategyNotFound
             logger.warning(f"reject signal: {signal}")
             return False
-        
+
         if not self.strategies.get_strategy(signal.strategy_id).status:
             signal.rm_reject_reason = RMRejectReason.StrategyInactive
             logger.warning(f"reject signal: {signal}")
             return False
-            
+
         return True
 
-    def qty_leverage_ratio_adjustment(self, signal: Signal) -> int:
+    def qty_leverage_ratio_adjustment(self, signal: Signal):
         signal.quantity = int(
             signal.quantity
             * self.strategies.get_strategy(signal.strategy_id).leverage_ratio
         )
+
+    def price_limit_adjustment(self, signal: Signal):
+        contract = self.contracts.get_contract(signal.code)
+        if signal.price > contract.limit_up:
+            logger.warning(f"price overshoot limit: {signal}")
+            signal.price = contract.limit_up
+        if signal.price < contract.limit_down:
+            logger.warning(f"price overshoot limit: {signal}")
+            signal.price = contract.limit_down
 
     def _validate_trade_datetime(self, signal: Signal) -> bool:
         if Config.DEBUG:

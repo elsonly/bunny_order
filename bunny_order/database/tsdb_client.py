@@ -1,3 +1,4 @@
+import time
 from typing import List
 import psycopg2
 import psycopg2.extras as extras
@@ -6,16 +7,55 @@ import pandas as pd
 
 class TSDBClient:
     def __init__(self, host: str, port: int, user: str, password: str, db: str):
+        self.__host = host
+        self.__port = port
+        self.__user = user
+        self.__password = password
+        self.__db = db
+        self.reconnect_wait_seconds = 5
+        self.reconnect_max_retires = 20000
+        self._reconnect_retry = 0
+        self.conn: psycopg2.connection = None
+        self.connect()
+
+    def connect(self):
         self.conn = psycopg2.connect(
-            host=host,
-            port=port,
-            user=user,
-            password=password,
-            database=db,
+            host=self.__host,
+            port=self.__port,
+            user=self.__user,
+            password=self.__password,
+            database=self.__db,
         )
+        if self.conn.closed == 0:
+            self._reconnect_retry = 0
+
+    def reconnect(self):
+        while (
+            not self.is_connected()
+            and self._reconnect_retry < self.reconnect_max_retires
+        ):
+            self._reconnect_retry += 1
+            print(f"reconnecting... | retry: {self._reconnect_retry}")
+            self.connect()
+            if not self.is_connected():
+                time.sleep(self.reconnect_wait_seconds)
+
+        if self.is_connected():
+            print("connected")
+        else:
+            raise Exception("max reconnect_max_retires exceeded")
+
+    def is_connected(self) -> bool:
+        if not self.conn:
+            return False
+        if self.conn.closed != 0:
+            return False
+        return True
 
     def execute_query(self, query: str, out_type: str = None):
         """Execute a single query"""
+        if not self.is_connected():
+            self.reconnect()
 
         ret = 0  # Return value
         cursor = self.conn.cursor()
@@ -36,13 +76,7 @@ class TSDBClient:
                 ret = pd.DataFrame(ret, columns=cols)
             elif out_type == "dict":
                 cols = [x.name for x in cursor.description]
-                ret = [
-                    {
-                        col:row[k]
-                        for k, col in enumerate(cols)
-                    }
-                    for row in ret
-                ]
+                ret = [{col: row[k] for k, col in enumerate(cols)} for row in ret]
 
         cursor.close()
         return ret
@@ -51,6 +85,8 @@ class TSDBClient:
         """
         Using psycopg2.extras.execute_values() to insert the dataframe
         """
+        if not self.is_connected():
+            self.reconnect()
         # Create a list of tupples from the dataframe values
         tuples = [tuple(x) for x in df.to_numpy()]
         # Comma-separated dataframe columns
@@ -74,6 +110,8 @@ class TSDBClient:
         """
         Using psycopg2.extras.execute_values() to insert the List of tuple
         """
+        if not self.is_connected():
+            self.reconnect()
         # Comma-separated columns
         cols = ",".join(columns)
         # SQL quert to execute
@@ -99,6 +137,8 @@ class TSDBClient:
         """
         Using psycopg2.extras.execute_batch() to upsert the dataframe
         """
+        if not self.is_connected():
+            self.reconnect()
         # Create a list of tupples from the dataframe values
         tuples = [tuple(x) for x in df.to_numpy()]
         # Comma-separated dataframe columns

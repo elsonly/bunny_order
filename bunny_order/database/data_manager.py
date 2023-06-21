@@ -146,7 +146,7 @@ class DataManager:
         elif method == "upsert":
             if not conflict_cols:
                 raise Exception("conflict_cols is required")
-            result = self.cli.excute_batch_upsert_df(
+            result = self.cli.execute_batch_upsert_df(
                 df, table, conflict_cols=conflict_cols
             )
 

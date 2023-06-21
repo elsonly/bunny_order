@@ -15,7 +15,7 @@ from bunny_order.models import (
     Action,
     ExitType,
 )
-from bunny_order.common import Positions, Strategies, Contracts
+from bunny_order.common import Positions, Strategies, Contracts, TradingDates
 
 
 @pytest.fixture(name="exit_handler")
@@ -23,8 +23,14 @@ def exit_handler(
     strategies: Strategies,
     positions: Positions,
     contracts: Contracts,
+    trading_dates: TradingDates,
 ):
-    return ExitHandler(strategies=strategies, positions=positions, contracts=contracts)
+    return ExitHandler(
+        strategies=strategies,
+        positions=positions,
+        contracts=contracts,
+        trading_dates=trading_dates,
+    )
 
 
 def test_send_exit_signal(exit_handler: ExitHandler):
@@ -74,9 +80,12 @@ def test_exit_by_out_date(freezer, mocker: MockerFixture, exit_handler: ExitHand
         exit_take_profit=None,
         exit_dp_days=None,
         exit_dp_profit_limit=None,
+        enable_dividend=False,
+        enable_raise=False,
     )
     freezer.move_to("2023-05-28")
     m_send_exit_signal = mocker.patch.object(exit_handler, "send_exit_signal")
+    _ = mocker.patch.object(exit_handler.trading_dates, "_check_updated")
     # no signal
     exit_handler.exit_by_out_date(strategy=strategy, position=position)
     m_send_exit_signal.assert_not_called()
@@ -118,6 +127,8 @@ def test_exit_by_days_profit_limit(
         exit_take_profit=None,
         exit_dp_days=None,
         exit_dp_profit_limit=None,
+        enable_dividend=False,
+        enable_raise=False,
     )
     snapshot = QuoteSnapshot(
         dt=datetime.datetime(2023, 5, 26, 14, 30),
@@ -138,6 +149,7 @@ def test_exit_by_days_profit_limit(
 
     freezer.move_to("2023-05-30T")
     m_send_exit_signal = mocker.patch.object(exit_handler, "send_exit_signal")
+    _ = mocker.patch.object(exit_handler.trading_dates, "_check_updated")
     # no signal
     exit_handler.exit_by_days_profit_limit(
         strategy=strategy, position=position, snapshot=snapshot
@@ -145,34 +157,31 @@ def test_exit_by_days_profit_limit(
     m_send_exit_signal.assert_not_called()
 
     # no signal
-    strategy.exit_dp_days = 2 # met
-    strategy.exit_dp_profit_limit = -0.1 # not met
+    strategy.exit_dp_days = 2  # met
+    strategy.exit_dp_profit_limit = -0.1  # not met
     exit_handler.exit_by_days_profit_limit(
         strategy=strategy, position=position, snapshot=snapshot
     )
     m_send_exit_signal.assert_not_called()
 
     # no signal
-    strategy.exit_dp_days = 5 # not met
-    strategy.exit_dp_profit_limit = 0.1 # met
+    strategy.exit_dp_days = 5  # not met
+    strategy.exit_dp_profit_limit = 0.1  # met
     exit_handler.exit_by_days_profit_limit(
         strategy=strategy, position=position, snapshot=snapshot
     )
     m_send_exit_signal.assert_not_called()
 
     # signal
-    strategy.exit_dp_days = 2 # met
-    strategy.exit_dp_profit_limit = 0.1 # met
+    strategy.exit_dp_days = 2  # met
+    strategy.exit_dp_profit_limit = 0.1  # met
     exit_handler.exit_by_days_profit_limit(
         strategy=strategy, position=position, snapshot=snapshot
     )
     m_send_exit_signal.assert_called_once_with(position, ExitType.ExitByDaysProfitLimit)
 
 
-
-def test_exit_by_take_profit(
-    mocker: MockerFixture, exit_handler: ExitHandler
-):
+def test_exit_by_take_profit(mocker: MockerFixture, exit_handler: ExitHandler):
     position = Position(
         strategy=1,
         code="2836",
@@ -196,6 +205,8 @@ def test_exit_by_take_profit(
         exit_take_profit=None,
         exit_dp_days=None,
         exit_dp_profit_limit=None,
+        enable_dividend=False,
+        enable_raise=False,
     )
     snapshot = QuoteSnapshot(
         dt=datetime.datetime(2023, 5, 26, 14, 30),
@@ -216,22 +227,21 @@ def test_exit_by_take_profit(
 
     m_send_exit_signal = mocker.patch.object(exit_handler, "send_exit_signal")
     # no signal
-    strategy.exit_take_profit = 0.1 # not met
+    strategy.exit_take_profit = 0.1  # not met
     exit_handler.exit_by_take_profit(
         strategy=strategy, position=position, snapshot=snapshot
     )
     m_send_exit_signal.assert_not_called()
 
     # signal
-    strategy.exit_take_profit = -0.1 # met
+    strategy.exit_take_profit = -0.1  # met
     exit_handler.exit_by_take_profit(
         strategy=strategy, position=position, snapshot=snapshot
     )
     m_send_exit_signal.assert_called_once_with(position, ExitType.ExitByTakeProfit)
 
-def test_exit_by_stop_loss(
-    mocker: MockerFixture, exit_handler: ExitHandler
-):
+
+def test_exit_by_stop_loss(mocker: MockerFixture, exit_handler: ExitHandler):
     position = Position(
         strategy=1,
         code="2836",
@@ -255,6 +265,8 @@ def test_exit_by_stop_loss(
         exit_take_profit=None,
         exit_dp_days=None,
         exit_dp_profit_limit=None,
+        enable_dividend=False,
+        enable_raise=False,
     )
     snapshot = QuoteSnapshot(
         dt=datetime.datetime(2023, 5, 26, 14, 30),
@@ -275,14 +287,14 @@ def test_exit_by_stop_loss(
 
     m_send_exit_signal = mocker.patch.object(exit_handler, "send_exit_signal")
     # no signal
-    strategy.exit_stop_loss = -0.1 # not met
+    strategy.exit_stop_loss = -0.1  # not met
     exit_handler.exit_by_stop_loss(
         strategy=strategy, position=position, snapshot=snapshot
     )
     m_send_exit_signal.assert_not_called()
 
     # signal
-    strategy.exit_stop_loss = 0.1 # met
+    strategy.exit_stop_loss = 0.1  # met
     exit_handler.exit_by_stop_loss(
         strategy=strategy, position=position, snapshot=snapshot
     )

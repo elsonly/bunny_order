@@ -127,7 +127,7 @@ class TSDBClient:
             return 1
         cursor.close()
 
-    def excute_batch_upsert_df(
+    def execute_batch_upsert_df(
         self,
         df: pd.DataFrame,
         table: str,

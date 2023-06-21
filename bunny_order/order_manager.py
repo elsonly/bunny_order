@@ -4,7 +4,7 @@ from decimal import Decimal
 import time
 from typing import Dict, List, Deque, Tuple, Union
 import threading
-from collections import deque
+from collections import deque, defaultdict
 
 from bunny_order.models import (
     SignalSource,
@@ -24,10 +24,159 @@ from bunny_order.utils import (
     adjust_price_for_tick_unit,
     get_tpe_datetime,
     is_trade_time,
-    is_week_date,
+    get_seqno,
+    get_order_id,
 )
 from bunny_order.common import Strategies, Contracts, TradingDates
 from bunny_order.config import Config
+
+
+class SignalCollector:
+    def __init__(self, dm: DataManager, contracts: Contracts):
+        self.dm = dm
+        self.contracts = contracts
+        self.collector: Dict[str, Dict[Action, List[Signal]]] = {}
+        self.__last_ts = 0
+        self._offsetting_signals: List[Signal] = []
+        self._signals: List[Signal] = []
+
+    def on_signal(self, signal: Signal):
+        logger.info(signal)
+        if signal.code not in self.collector:
+            self.collector[signal.code] = {}
+        if signal.action not in self.collector[signal.code]:
+            self.collector[signal.code][signal.action] = []
+        self.collector[signal.code][signal.action].append(signal)
+        self.__last_ts = time.time()
+
+    def _offset_signals(self, signals: Dict[Action, List[Signal]]):
+        if Action.Buy not in signals and Action.Sell not in signals:
+            return
+        elif Action.Buy in signals and Action.Sell not in signals:
+            self._signals.extend(signals[Action.Buy])
+            return
+        elif Action.Buy not in signals and Action.Sell in signals:
+            self._signals.extend(signals[Action.Sell])
+            return
+        buy_signals = signals[Action.Buy]
+        sell_signals = signals[Action.Sell]
+        if len(buy_signals) == 0 or len(sell_signals) == 0:
+            self._signals.extend(buy_signals)
+            self._signals.extend(sell_signals)
+            return
+
+        for s_signal in sell_signals:
+            if s_signal.quantity == 0:
+                continue
+            for b_signal in buy_signals:
+                if b_signal.quantity == 0:
+                    continue
+                offset_qty = min(b_signal.quantity, s_signal.quantity)
+                offset_s_signal = s_signal.copy(deep=True)
+                offset_s_signal.quantity = offset_qty
+                offset_b_signal = b_signal.copy(deep=True)
+                offset_b_signal.quantity = offset_qty
+                s_signal.quantity -= offset_qty
+                b_signal.quantity -= offset_qty
+                self._offsetting_signals.append(offset_b_signal)
+                self._offsetting_signals.append(offset_s_signal)
+
+                if s_signal.quantity == 0:
+                    break
+
+        self._signals.extend(buy_signals)
+        self._signals.extend(sell_signals)
+
+    def check_signals(self) -> bool:
+        if get_tpe_datetime().time() < dt.time(hour=9, minute=0, second=0):
+            offset_interval = 60
+        else:
+            offset_interval = 0
+
+        if time.time() - self.__last_ts < offset_interval:
+            return False
+
+        for code in list(self.collector):
+            signals = self.collector.pop(code)
+            self._offset_signals(signals)
+
+        if len(self._signals) > 0:
+            return True
+        elif len(self._offsetting_signals) > 0:
+            return True
+        else:
+            return False
+
+    def execute_offsetting_signals(self):
+        for _ in range(len(self._offsetting_signals)):
+            signal = self._offsetting_signals.pop()
+            self._place_mock_order(signal)
+
+    def get_signals(self) -> List[Signal]:
+        return [self._signals.pop() for _ in range(len(self._signals))]
+
+    def _place_mock_order(self, signal: Signal):
+        logger.info(signal)
+        order = SF31Order(
+            signal_id=signal.id,
+            sfdate=signal.sdate,
+            sftime=get_tpe_datetime().time(),
+            strategy_id=signal.strategy_id,
+            security_type=signal.security_type,
+            code=signal.code,
+            order_type=signal.order_type,
+            price_type=signal.price_type,
+            action=signal.action,
+            quantity=signal.quantity,
+            price=signal.price,
+        )
+        self.dm.save_sf31_order(order)
+        order_cb = self._mock_order_callback(order)
+        self.dm.save_order(order_cb)
+        order.order_id = order_cb.order_id
+        self.dm.update_sf31_order(order)
+        trade_cb = self._mock_trade_callback(order_cb)
+        self.dm.save_trade(trade_cb)
+
+    def _mock_order_callback(self, order: SF31Order) -> Order:
+        order_time = (
+            order.sftime
+            if order.sftime >= dt.time(hour=9, minute=0, second=0)
+            else dt.time(hour=9, minute=0, second=0)
+        )
+        return Order(
+            trader_id="000",
+            strategy=order.strategy_id,
+            order_id=get_order_id(),
+            security_type=order.security_type,
+            order_date=order.sfdate,
+            order_time=order_time,
+            code=order.code,
+            action=order.action,
+            order_price=order.price,
+            order_qty=order.quantity,
+            order_type=order.order_type,
+            price_type=order.price_type,
+            status="New",
+            msg="",
+        )
+
+    def _mock_trade_callback(self, order_cb: Order) -> Trade:
+        return Trade(
+            trader_id=order_cb.trader_id,
+            strategy=order_cb.strategy,
+            order_id=order_cb.order_id,
+            order_type=order_cb.order_type,
+            seqno=get_seqno(),
+            security_type=order_cb.security_type,
+            trade_date=order_cb.order_date,
+            trade_time=order_cb.order_time,
+            code=order_cb.code,
+            action=order_cb.action,
+            # TODO: deal price
+            price=self.contracts.get_contract(order_cb.code).reference,
+            qty=order_cb.order_qty,
+        )
 
 
 class OrderManager:
@@ -52,6 +201,7 @@ class OrderManager:
         self.pause_order = False
         self.active_event = active_event
         self.pending_signals: Deque[Signal] = deque()
+        self.signal_collector = SignalCollector(dm=self.dm, contracts=self.contracts)
 
     def reset(self):
         self.unhandled_orders.clear()
@@ -103,7 +253,7 @@ class OrderManager:
         else:
             return signal.price
 
-    def excute_orders_half_open_half_order_low_ratio(self, signal: Signal):
+    def execute_orders_half_open_half_order_low_ratio(self, signal: Signal):
         # split signal into 2 orders
         order1 = SF31Order(
             signal_id=signal.id,
@@ -135,10 +285,7 @@ class OrderManager:
         )
         self.place_order(order2)
 
-    def excute_pre_market_orders(self, signal: Signal):
-        if not is_trade_time():
-            logger.warning(f"invalid trade time for signal: {signal}")
-            return
+    def execute_limit_order(self, signal: Signal):
         order = SF31Order(
             signal_id=signal.id,
             sfdate=signal.sdate,
@@ -157,9 +304,12 @@ class OrderManager:
     def on_signal(self, signal: Signal):
         logger.info(signal)
         if signal.source == SignalSource.XQ:
-            self.excute_orders_half_open_half_order_low_ratio(signal)
+            if signal.action == Action.Buy:
+                self.execute_orders_half_open_half_order_low_ratio(signal)
+            else:
+                self.execute_limit_order(signal)
         elif signal.source == SignalSource.ExitHandler:
-            self.excute_pre_market_orders(signal)
+            self.execute_limit_order(signal)
         else:
             raise Exception(f"invalid signal source: {signal.source}")
 
@@ -177,6 +327,8 @@ class OrderManager:
                 )
             return False
         if not self.trading_dates.is_trading_date():
+            return False
+        if not is_trade_time():
             return False
         if not self.contracts.check_updated():
             if is_trade_time():
@@ -203,10 +355,7 @@ class OrderManager:
                 if self.q_in:
                     event, data = self.q_in.popleft()
                     if event == Event.Signal:
-                        if is_trade_time():
-                            self.on_signal(data)
-                        else:
-                            self.pending_signals.append(data)
+                        self.signal_collector.on_signal(data)
                     elif event == Event.OrderCallback:
                         self.on_order_callback(data)
                     elif event == Event.TradeCallback:
@@ -214,9 +363,10 @@ class OrderManager:
                     else:
                         logger.warning(f"Invalid event: {event}")
 
-                while is_trade_time() and self.pending_signals:
-                    signal = self.pending_signals.popleft()
-                    self.on_signal(signal)
+                if self.signal_collector.check_signals():
+                    for signal in self.signal_collector.get_signals():
+                        self.on_signal(signal)
+                    self.signal_collector.execute_offsetting_signals()
 
             except Exception as e:
                 logger.exception(e)

@@ -68,6 +68,11 @@ def adjust_price_for_tick_unit(price: Decimal) -> Decimal:
 def get_signal_id(digits: int = 16) -> str:
     return uuid.uuid4().hex[:digits]
 
+def get_order_id(digits: int = 10) -> str:
+    return uuid.uuid4().hex[:digits]
+
+def get_seqno(digits: int = 12) -> str:
+    return uuid.uuid4().hex[:digits]
 
 def dump_checkpoints(path: str, data: dict) -> None:
     with open(path, "w", encoding="utf-8") as f:

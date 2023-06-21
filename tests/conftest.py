@@ -10,11 +10,11 @@ from bunny_order.models import (
     QuoteSnapshot,
     Action,
 )
-from bunny_order.common import Positions, Strategies, Contracts, Snapshots
+from bunny_order.common import Positions, Strategies, Contracts, Snapshots, TradingDates
 
 
 @pytest.fixture()
-def positions() -> Dict[str, Dict[str, Position]]:
+def positions() -> Positions:
     data = {
         1: {
             "2836": Position(
@@ -110,7 +110,7 @@ def positions() -> Dict[str, Dict[str, Position]]:
 
 
 @pytest.fixture()
-def strategies() -> Dict[int, Strategy]:
+def strategies() -> Strategies:
     data = {
         2: Strategy(
             id=2,
@@ -126,6 +126,8 @@ def strategies() -> Dict[int, Strategy]:
             exit_take_profit=None,
             exit_dp_days=None,
             exit_dp_profit_limit=None,
+            enable_raise=False,
+            enable_dividend=False,
         ),
         3: Strategy(
             id=3,
@@ -141,6 +143,8 @@ def strategies() -> Dict[int, Strategy]:
             exit_take_profit=None,
             exit_dp_days=None,
             exit_dp_profit_limit=None,
+            enable_raise=False,
+            enable_dividend=False,
         ),
         4: Strategy(
             id=4,
@@ -156,6 +160,8 @@ def strategies() -> Dict[int, Strategy]:
             exit_take_profit=None,
             exit_dp_days=None,
             exit_dp_profit_limit=None,
+            enable_raise=False,
+            enable_dividend=False,
         ),
         5: Strategy(
             id=5,
@@ -171,6 +177,8 @@ def strategies() -> Dict[int, Strategy]:
             exit_take_profit=None,
             exit_dp_days=None,
             exit_dp_profit_limit=None,
+            enable_raise=False,
+            enable_dividend=False,
         ),
         6: Strategy(
             id=6,
@@ -186,6 +194,8 @@ def strategies() -> Dict[int, Strategy]:
             exit_take_profit=None,
             exit_dp_days=None,
             exit_dp_profit_limit=None,
+            enable_raise=False,
+            enable_dividend=False,
         ),
         7: Strategy(
             id=7,
@@ -201,6 +211,8 @@ def strategies() -> Dict[int, Strategy]:
             exit_take_profit=None,
             exit_dp_days=None,
             exit_dp_profit_limit=None,
+            enable_raise=False,
+            enable_dividend=False,
         ),
         1: Strategy(
             id=1,
@@ -216,6 +228,8 @@ def strategies() -> Dict[int, Strategy]:
             exit_take_profit=None,
             exit_dp_days=None,
             exit_dp_profit_limit=None,
+            enable_raise=False,
+            enable_dividend=False,
         ),
     }
     strategies = Strategies()
@@ -224,7 +238,7 @@ def strategies() -> Dict[int, Strategy]:
 
 
 @pytest.fixture()
-def contracts() -> Dict[str, Contract]:
+def contracts() -> Contracts:
     data = {
         "3029": Contract(
             code="3029",
@@ -305,7 +319,7 @@ def contracts() -> Dict[str, Contract]:
 
 
 @pytest.fixture()
-def snapshots() -> Dict[str, QuoteSnapshot]:
+def snapshots() -> Snapshots:
     data = {
         "2836": QuoteSnapshot(
             dt=datetime.datetime(2023, 5, 26, 14, 30),
@@ -456,3 +470,43 @@ def snapshots() -> Dict[str, QuoteSnapshot]:
     snapshots = Snapshots()
     snapshots.update(data)
     return snapshots
+
+
+@pytest.fixture()
+def trading_dates() -> TradingDates:
+    data = [
+        datetime.date(2023, 5, 23),
+        datetime.date(2023, 5, 24),
+        datetime.date(2023, 5, 25),
+        datetime.date(2023, 5, 26),
+        datetime.date(2023, 5, 29),
+        datetime.date(2023, 5, 30),
+        datetime.date(2023, 5, 31),
+        datetime.date(2023, 6, 1),
+        datetime.date(2023, 6, 2),
+        datetime.date(2023, 6, 5),
+        datetime.date(2023, 6, 6),
+        datetime.date(2023, 6, 7),
+        datetime.date(2023, 6, 8),
+        datetime.date(2023, 6, 9),
+        datetime.date(2023, 6, 12),
+        datetime.date(2023, 6, 13),
+        datetime.date(2023, 6, 14),
+        datetime.date(2023, 6, 15),
+        datetime.date(2023, 6, 16),
+        datetime.date(2023, 6, 19),
+        datetime.date(2023, 6, 20),
+        datetime.date(2023, 6, 21),
+        datetime.date(2023, 6, 26),
+        datetime.date(2023, 6, 27),
+        datetime.date(2023, 6, 28),
+        datetime.date(2023, 6, 29),
+        datetime.date(2023, 6, 30),
+        datetime.date(2023, 7, 3),
+        datetime.date(2023, 7, 4),
+        datetime.date(2023, 7, 5),
+    ]
+
+    trading_dates = TradingDates()
+    trading_dates.update(data)
+    return trading_dates

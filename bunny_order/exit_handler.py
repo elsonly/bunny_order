@@ -25,11 +25,11 @@ from bunny_order.utils import (
     logger,
     dump_checkpoints,
     load_checkpoints,
-    is_trade_date,
     is_trade_time,
+    is_before_market_time,
     is_signal_time,
 )
-from bunny_order.common import Strategies, Snapshots, Positions, Contracts
+from bunny_order.common import Strategies, Snapshots, Positions, Contracts, TradingDates
 from bunny_order.config import Config
 
 
@@ -39,6 +39,7 @@ class ExitHandler:
         strategies: Strategies,
         positions: Positions,
         contracts: Contracts,
+        trading_dates: TradingDates,
         q_in: Deque[Tuple[Event, Dict[str, QuoteSnapshot]]] = deque(),
         q_out: Deque[Tuple[Event, Signal]] = deque(),
         active_event: threading.Event = threading.Event(),
@@ -49,6 +50,7 @@ class ExitHandler:
         self.strategies = strategies
         self.positions = positions
         self.contracts = contracts
+        self.trading_dates = trading_dates
         self.running_signals: DefaultDict[int, List[str]] = defaultdict(list)
         self.checkpoints_path = f"{Config.CHECKPOINTS_DIR}/exit_handler.json"
         self.running_signals.update(load_checkpoints(self.checkpoints_path))
@@ -92,11 +94,8 @@ class ExitHandler:
         if position.first_entry_date is None:
             return
         # TODO: should consider holiday in business day
-        if (
-            get_tpe_datetime().date()
-            >= (
-                position.first_entry_date + pd.offsets.BDay(strategy.holding_period)
-            ).date()
+        if get_tpe_datetime().date() >= self.trading_dates.get_next_n_trading_date(
+            position.first_entry_date, strategy.holding_period
         ):
             self.send_exit_signal(position, ExitType.ExitByOutDate)
 
@@ -108,11 +107,8 @@ class ExitHandler:
         if strategy.exit_dp_days is None or strategy.exit_dp_profit_limit is None:
             return
         # TODO: should consider holiday in business day
-        if (
-            get_tpe_datetime().date()
-            >= (
-                position.first_entry_date + strategy.exit_dp_days * pd.offsets.BDay()
-            ).date()
+        if get_tpe_datetime().date() >= self.trading_dates.get_next_n_trading_date(
+            position.first_entry_date, strategy.exit_dp_days
         ):
             if position.action == Action.Buy:
                 if (
@@ -192,7 +188,15 @@ class ExitHandler:
             self.exit_by_out_date(strategy, position)
 
     def system_check(self) -> bool:
-        if not is_trade_date():
+        if not is_signal_time():
+            return False
+        if not self.trading_dates.check_updated():
+            if is_trade_time():
+                logger.warning(
+                    f"trading_dates not updated, previous update time: {self.contracts.update_dt}"
+                )
+            return False
+        if not self.trading_dates.is_trading_date():
             return False
         if not self.contracts.check_updated():
             if is_trade_time():
@@ -225,16 +229,15 @@ class ExitHandler:
                 if self.q_in:
                     event, data = self.q_in.popleft()
                     if event == Event.Quote:
-                        if is_trade_time():
-                            self.on_quote(data)
+                        self.on_quote(data)
                     else:
                         logger.warning(f"Invalid event: {event}")
 
-                if is_signal_time():
+                if is_before_market_time():
                     self.before_market_signals()
 
             except Exception as e:
                 logger.exception(e)
 
-            time.sleep(0.01)
+            time.sleep(0.1)
         logger.info("Shutdown Exit Handler")

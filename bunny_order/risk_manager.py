@@ -10,7 +10,13 @@ from bunny_order.models import (
     SignalSource,
     Action,
 )
-from bunny_order.common import Strategies, Contracts, Positions, ComingDividends
+from bunny_order.common import (
+    Strategies,
+    Contracts,
+    Positions,
+    ComingDividends,
+    TradingDates,
+)
 from bunny_order.utils import logger, get_tpe_datetime
 from bunny_order.config import Config
 
@@ -22,11 +28,13 @@ class RiskManager:
         contracts: Contracts,
         positions: Positions,
         coming_dividends: ComingDividends,
+        trading_dates: TradingDates,
     ):
         self.strategies = strategies
         self.contracts = contracts
         self.positions = positions
         self.coming_dividends = coming_dividends
+        self.trading_dates = trading_dates
         self.daily_amount_limit = Config.OM_DAILY_AMOUNT_LIMIT
         self.cumulative_amount = 0
 
@@ -81,8 +89,11 @@ class RiskManager:
             ):
                 coming_dividend = self.coming_dividends.get_coming_dividend(signal.code)
                 if (
-                    get_tpe_datetime() + strategy.holding_period * pd.offsets.BDay()
-                ).date() >= coming_dividend.ex_date:
+                    self.trading_dates.get_next_n_trading_date(
+                        days=strategy.holding_period
+                    )
+                    >= coming_dividend.ex_date
+                ):
                     signal.rm_reject_reason = RMRejectReason.CannotParticipatingDividend
                     logger.warning(f"reject signal: {signal}")
                     return False

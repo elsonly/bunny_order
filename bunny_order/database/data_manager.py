@@ -342,3 +342,21 @@ class DataManager:
         for row in data:
             d[row["code"]] = ComingDividend(**row)
         return d
+
+    def get_near_trading_dates(self) -> List[dt.date]:
+        df = self.cli.execute_query(
+            """
+            select tdate 
+            from cmoney.calendar
+            where exchange='TWSE'
+                and tdate >= CURRENT_DATE - INTERVAL '6 month'
+                and tdate < CURRENT_DATE + INTERVAL '6 month'
+                and is_trading_date
+            order by tdate;
+            """,
+            "df",
+        )
+        if df.empty:
+            return []
+
+        return df["tdate"].to_list()

@@ -24,9 +24,9 @@ from bunny_order.utils import (
     adjust_price_for_tick_unit,
     get_tpe_datetime,
     is_trade_time,
-    is_trade_date,
+    is_week_date,
 )
-from bunny_order.common import Strategies, Contracts
+from bunny_order.common import Strategies, Contracts, TradingDates
 from bunny_order.config import Config
 
 
@@ -35,6 +35,7 @@ class OrderManager:
         self,
         strategies: Strategies,
         contracts: Contracts,
+        trading_dates: TradingDates,
         unhandled_orders: Deque[SF31Order] = deque(),
         q_in: Deque[Tuple[Event, Union[Signal, Order, Trade]]] = deque(),
         active_event: threading.Event = threading.Event(),
@@ -42,6 +43,7 @@ class OrderManager:
         self.q_in = q_in
         self.strategies = strategies
         self.contracts = contracts
+        self.trading_dates = trading_dates
         self.unhandled_orders = unhandled_orders
         self.dm = DataManager()
         self.s31_orders_dir = (
@@ -168,7 +170,13 @@ class OrderManager:
         logger.info(trade)
 
     def system_check(self) -> bool:
-        if not is_trade_date():
+        if not self.trading_dates.check_updated():
+            if is_trade_time():
+                logger.warning(
+                    f"trading_dates not updated, previous update time: {self.contracts.update_dt}"
+                )
+            return False
+        if not self.trading_dates.is_trading_date():
             return False
         if not self.contracts.check_updated():
             if is_trade_time():

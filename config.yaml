@@ -14,7 +14,10 @@ base: &base
     position_callback_file: Position.txt
 
   engine:
-    signal_time: "0820"
+    signal_start_time: "0820"
+    signal_end_time: "1430"
+    before_market_start_time: "0830"
+    before_market_end_time: "0900"
     trade_start_time: "0840"
     trade_end_time: "1430"
     sync_start_time: "0750"

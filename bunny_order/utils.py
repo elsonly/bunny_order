@@ -8,10 +8,8 @@ from functools import wraps
 from decimal import Decimal, ROUND_HALF_UP
 import json
 import uuid
-from typing import Dict
 
 from bunny_order.config import Config
-from bunny_order.models import Contract, Position, Strategy
 
 
 if not os.path.exists(Config.LOGURU_SINK_DIR):
@@ -86,8 +84,15 @@ def load_checkpoints(path: str) -> dict:
 
 def is_signal_time() -> bool:
     return Config.DEBUG or (
-        get_tpe_datetime().time() >= Config.SIGNAL_TIME
-        and get_tpe_datetime().time() < Config.TRADE_END_TIME
+        get_tpe_datetime().time() >= Config.SIGNAL_START_TIME
+        and get_tpe_datetime().time() < Config.SIGNAL_END_TIME
+    )
+
+
+def is_before_market_time() -> bool:
+    return Config.DEBUG or (
+        get_tpe_datetime().time() >= Config.BEFORE_MARKET_START_TIME
+        and get_tpe_datetime().time() < Config.BEFORE_MARKET_END_TIME
     )
 
 
@@ -105,7 +110,7 @@ def is_trade_time() -> bool:
     )
 
 
-def is_trade_date() -> bool:
+def is_week_date() -> bool:
     return Config.DEBUG or (get_tpe_datetime().weekday() < 5)
 
 
@@ -161,10 +166,3 @@ class ReadWriteLock:
     def release_write(self):
         """Release a write lock."""
         self._read_ready.release()
-
-
-lock = ReadWriteLock()
-
-lock.acquire_write()
-lock.release_write()
-lock.acquire_read()

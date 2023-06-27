@@ -32,6 +32,16 @@ class BaseConfig:
     OBSERVER_TRADE_CALLBACK_FILE = config_yaml["observer"]["trade_callback_file"]
     OBSERVER_POSITION_CALLBACK_FILE = config_yaml["observer"]["position_callback_file"]
     # engine
+    BEFORE_MARKET_START_TIME = dt.time(
+        hour=int(config_yaml["engine"]["before_market_start_time"][:2]),
+        minute=int(config_yaml["engine"]["before_market_start_time"][2:4]),
+        second=0,
+    )
+    BEFORE_MARKET_END_TIME = dt.time(
+        hour=int(config_yaml["engine"]["before_market_end_time"][:2]),
+        minute=int(config_yaml["engine"]["before_market_end_time"][2:4]),
+        second=0,
+    )
     TRADE_START_TIME = dt.time(
         hour=int(config_yaml["engine"]["trade_start_time"][:2]),
         minute=int(config_yaml["engine"]["trade_start_time"][2:4]),
@@ -67,9 +77,14 @@ class BaseConfig:
         minute=int(config_yaml["engine"]["reset_time2"][2:4]),
         second=0,
     )
-    SIGNAL_TIME = dt.time(
-        hour=int(config_yaml["engine"]["signal_time"][:2]),
-        minute=int(config_yaml["engine"]["signal_time"][2:4]),
+    SIGNAL_START_TIME = dt.time(
+        hour=int(config_yaml["engine"]["signal_start_time"][:2]),
+        minute=int(config_yaml["engine"]["signal_start_time"][2:4]),
+        second=0,
+    )
+    SIGNAL_END_TIME = dt.time(
+        hour=int(config_yaml["engine"]["signal_end_time"][:2]),
+        minute=int(config_yaml["engine"]["signal_end_time"][2:4]),
         second=0,
     )
     # exit handler

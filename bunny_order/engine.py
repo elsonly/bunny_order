@@ -10,7 +10,7 @@ from bunny_order.utils import (
     logger,
     get_tpe_datetime,
     is_trade_time,
-    is_trade_date,
+    is_week_date,
     get_next_schedule_time,
     is_signal_time,
     is_sync_time,
@@ -39,6 +39,7 @@ from bunny_order.common import (
     Positions,
     Contracts,
     ComingDividends,
+    TradingDates,
 )
 
 
@@ -55,6 +56,7 @@ class Engine:
         self.positions = Positions()
         self.contracts = Contracts()
         self.coming_dividends = ComingDividends()
+        self.trading_dates = TradingDates()
         self.unhandled_orders: Deque[SF31Order] = deque()
         # order_id -> Order
         self.order_callbacks: Dict[str, Order] = {}
@@ -71,6 +73,7 @@ class Engine:
         self.om = OrderManager(
             strategies=self.strategies,
             contracts=self.contracts,
+            trading_dates=self.trading_dates,
             unhandled_orders=self.unhandled_orders,
             q_in=self.q_order_manager_in,
             active_event=self.om_active_event,
@@ -96,6 +99,7 @@ class Engine:
             strategies=self.strategies,
             positions=self.positions,
             contracts=self.contracts,
+            trading_dates=self.trading_dates,
             q_in=self.q_exit_handler_in,
             q_out=self.q_exit_handler_out,
             active_event=self.exit_handler_active_event,
@@ -111,6 +115,7 @@ class Engine:
             contracts=self.contracts,
             positions=self.positions,
             coming_dividends=self.coming_dividends,
+            trading_dates=self.trading_dates,
         )
 
         self.active = False
@@ -187,13 +192,18 @@ class Engine:
     def sync(self):
         self.update_strategies()
         self.update_positions()
-        if is_trade_date():
+        if is_week_date():
             if not self.contracts.update_dt or (not self.contracts.check_updated()):
                 self.update_contracts()
             if not self.coming_dividends.update_dt or (
                 not self.coming_dividends.check_updated()
             ):
                 self.update_coming_dividends()
+
+            if not self.trading_dates.update_dt or (
+                not self.trading_dates.check_updated()
+            ):
+                self.update_trading_dates()
 
     def update_positions(self):
         positions = self.dm.get_positions()
@@ -210,6 +220,10 @@ class Engine:
     def update_coming_dividends(self):
         coming_dividends = self.dm.get_coming_dividends()
         self.coming_dividends.update(coming_dividends)
+
+    def update_trading_dates(self):
+        trading_dates = self.dm.get_near_trading_dates()
+        self.trading_dates.update(trading_dates)
 
     def update_snapshots(self):
         codes = self.positions.get_position_codes()
@@ -277,7 +291,7 @@ class Engine:
             self._next_reset_dt2 += dt.timedelta(days=1)
 
         # interval
-        if is_trade_date():
+        if is_week_date():
             if is_sync_time() and time.time() - self._prev_sync_ts > self.sync_interval:
                 self.sync()
                 self._prev_sync_ts = time.time()
@@ -292,6 +306,14 @@ class Engine:
 
     def system_check(self) -> bool:
         if not is_signal_time():
+            return False
+        if not self.trading_dates.check_updated():
+            if is_trade_time():
+                logger.warning(
+                    f"trading_dates not updated, previous update time: {self.contracts.update_dt}"
+                )
+            return False
+        if not self.trading_dates.is_trading_date():
             return False
         if not self.contracts.check_updated():
             if is_trade_time():

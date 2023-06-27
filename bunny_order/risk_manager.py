@@ -8,6 +8,7 @@ from bunny_order.models import (
     Strategy,
     RMRejectReason,
     SignalSource,
+    Action,
 )
 from bunny_order.common import Strategies, Contracts, Positions, ComingDividends
 from bunny_order.utils import logger, get_tpe_datetime
@@ -62,27 +63,29 @@ class RiskManager:
         return True
 
     def _validate_raise(self, signal: Signal) -> bool:
-        if not self.strategies.get_strategy(signal.strategy_id).enable_raise:
-            if self.positions.exists(signal.strategy_id, signal.code):
-                signal.rm_reject_reason = RMRejectReason.DisableRaise
-                logger.warning(f"reject signal: {signal}")
-                return False
+        if signal.action == Action.Buy:
+            if not self.strategies.get_strategy(signal.strategy_id).enable_raise:
+                if self.positions.exists(signal.strategy_id, signal.code):
+                    signal.rm_reject_reason = RMRejectReason.DisableRaise
+                    logger.warning(f"reject signal: {signal}")
+                    return False
         return True
 
     def _validate_dividend_date(self, signal: Signal) -> bool:
-        strategy = self.strategies.get_strategy(signal.strategy_id)
-        if (
-            strategy.holding_period
-            and self.coming_dividends.exists(signal.code)
-            and not strategy.enable_dividend
-        ):
-            coming_dividend = self.coming_dividends.get_coming_dividend(signal.code)
+        if signal.action == Action.Buy:
+            strategy = self.strategies.get_strategy(signal.strategy_id)
             if (
-                get_tpe_datetime() + strategy.holding_period * pd.offsets.BDay()
-            ).date() >= coming_dividend.ex_date:
-                signal.rm_reject_reason = RMRejectReason.CannotParticipatingDividend
-                logger.warning(f"reject signal: {signal}")
-                return False
+                strategy.holding_period
+                and self.coming_dividends.exists(signal.code)
+                and not strategy.enable_dividend
+            ):
+                coming_dividend = self.coming_dividends.get_coming_dividend(signal.code)
+                if (
+                    get_tpe_datetime() + strategy.holding_period * pd.offsets.BDay()
+                ).date() >= coming_dividend.ex_date:
+                    signal.rm_reject_reason = RMRejectReason.CannotParticipatingDividend
+                    logger.warning(f"reject signal: {signal}")
+                    return False
         return True
 
     def _validate_strategy(self, signal: Signal) -> bool:
@@ -97,18 +100,17 @@ class RiskManager:
         return True
 
     def qty_leverage_ratio_adjustment(self, signal: Signal):
-        signal.quantity = int(
-            signal.quantity
-            * self.strategies.get_strategy(signal.strategy_id).leverage_ratio
-        )
+        if signal.action == Action.Buy:
+            signal.quantity = int(
+                signal.quantity
+                * self.strategies.get_strategy(signal.strategy_id).leverage_ratio
+            )
 
     def price_limit_adjustment(self, signal: Signal):
         contract = self.contracts.get_contract(signal.code)
-        if signal.price > contract.limit_up:
-            logger.warning(f"price overshoot limit: {signal}")
+        if signal.action == Action.Buy:
             signal.price = contract.limit_up
-        if signal.price < contract.limit_down:
-            logger.warning(f"price overshoot limit: {signal}")
+        else:
             signal.price = contract.limit_down
 
     def _validate_trade_datetime(self, signal: Signal) -> bool:

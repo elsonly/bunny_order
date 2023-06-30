@@ -320,6 +320,8 @@ class OrderManager:
         logger.info(trade)
 
     def system_check(self) -> bool:
+        if not is_trade_time():
+            return False
         if not self.trading_dates.check_updated():
             if is_trade_time():
                 logger.warning(
@@ -327,8 +329,6 @@ class OrderManager:
                 )
             return False
         if not self.trading_dates.is_trading_date():
-            return False
-        if not is_trade_time():
             return False
         if not self.contracts.check_updated():
             if is_trade_time():

@@ -190,20 +190,18 @@ class Engine:
         self.dm.save_positions(positions)
 
     def sync(self):
-        self.update_strategies()
-        self.update_positions()
-        if is_week_date():
-            if not self.contracts.update_dt or (not self.contracts.check_updated()):
-                self.update_contracts()
-            if not self.coming_dividends.update_dt or (
-                not self.coming_dividends.check_updated()
-            ):
-                self.update_coming_dividends()
-
-            if not self.trading_dates.update_dt or (
-                not self.trading_dates.check_updated()
-            ):
-                self.update_trading_dates()
+        if not self.strategies.update_dt or (not self.strategies.check_updated()):
+            self.update_strategies()
+        if not self.positions.update_dt or (not self.positions.check_updated()):
+            self.update_positions()
+        if not self.contracts.update_dt or (not self.contracts.check_updated()):
+            self.update_contracts()
+        if not self.coming_dividends.update_dt or (
+            not self.coming_dividends.check_updated()
+        ):
+            self.update_coming_dividends()
+        if not self.trading_dates.update_dt or (not self.trading_dates.check_updated()):
+            self.update_trading_dates()
 
     def update_positions(self):
         positions = self.dm.get_positions()
@@ -278,7 +276,6 @@ class Engine:
         self._next_reset_dt2 = get_next_schedule_time(Config.RESET_TIME2)
 
     def run_schedule_job(self):
-        # schedule
         cur_dt = get_tpe_datetime()
         if cur_dt >= self._next_reset_dt1:
             self.reset()
@@ -290,19 +287,20 @@ class Engine:
             self.sync()
             self._next_reset_dt2 += dt.timedelta(days=1)
 
-        # interval
-        if is_week_date():
-            if is_sync_time() and time.time() - self._prev_sync_ts > self.sync_interval:
-                self.sync()
-                self._prev_sync_ts = time.time()
+        if not is_week_date():
+            return
+        
+        if not is_sync_time():
+            return
 
-            if (
-                is_trade_time()
-                and time.time() - self._prev_snapshot_ts > self.snapshot_interval
-            ):
-                self.update_snapshots()
-                self.exit_handler.q_in.append((Event.Quote, self.snapshots))
-                self._prev_snapshot_ts = time.time()
+        if time.time() - self._prev_sync_ts > self.sync_interval:
+            self.sync()
+            self._prev_sync_ts = time.time()
+
+        if time.time() - self._prev_snapshot_ts > self.snapshot_interval:
+            self.update_snapshots()
+            self.exit_handler.q_in.append((Event.Quote, self.snapshots))
+            self._prev_snapshot_ts = time.time()
 
     def system_check(self) -> bool:
         if not is_signal_time():

@@ -26,7 +26,7 @@ from bunny_order.utils import (
     dump_checkpoints,
     load_checkpoints,
     is_trade_time,
-    is_before_market_time,
+    is_before_market_signal_time,
     is_signal_time,
 )
 from bunny_order.common import Strategies, Snapshots, Positions, Contracts, TradingDates
@@ -233,7 +233,7 @@ class ExitHandler:
                     else:
                         logger.warning(f"Invalid event: {event}")
 
-                if is_before_market_time():
+                if is_before_market_signal_time():
                     self.before_market_signals()
 
             except Exception as e:

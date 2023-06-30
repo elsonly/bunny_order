@@ -94,9 +94,9 @@ def is_signal_time() -> bool:
     )
 
 
-def is_before_market_time() -> bool:
+def is_before_market_signal_time() -> bool:
     return Config.DEBUG or (
-        get_tpe_datetime().time() >= Config.BEFORE_MARKET_START_TIME
+        get_tpe_datetime().time() >= Config.SIGNAL_START_TIME
         and get_tpe_datetime().time() < Config.BEFORE_MARKET_END_TIME
     )
 

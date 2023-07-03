@@ -190,10 +190,8 @@ class Engine:
         self.dm.save_positions(positions)
 
     def sync(self):
-        if not self.strategies.update_dt or (not self.strategies.check_updated()):
-            self.update_strategies()
-        if not self.positions.update_dt or (not self.positions.check_updated()):
-            self.update_positions()
+        self.update_strategies()
+        self.update_positions()
         if not self.contracts.update_dt or (not self.contracts.check_updated()):
             self.update_contracts()
         if not self.coming_dividends.update_dt or (

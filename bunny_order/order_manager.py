@@ -90,6 +90,8 @@ class SignalCollector:
     def check_signals(self) -> bool:
         if get_tpe_datetime().time() < dt.time(hour=9, minute=0, second=0):
             offset_interval = 60
+        elif Config.DEBUG:
+            offset_interval = 5
         else:
             offset_interval = 0
 

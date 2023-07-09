@@ -277,6 +277,8 @@ class TradingDates:
             self._is_trading_date = False
 
     def is_trading_date(self) -> bool:
+        if Config.DEBUG:
+            return True
         self._check_updated()
         return self._is_trading_date
 
@@ -293,7 +295,9 @@ class TradingDates:
             return False
         return True
 
-    def get_next_n_trading_date(self, bench_date: dt.date = None, days: int = 0) -> dt.date:
+    def get_next_n_trading_date(
+        self, bench_date: dt.date = None, days: int = 0
+    ) -> dt.date:
         self._check_updated()
         if bench_date:
             tdate = bench_date
@@ -309,6 +313,11 @@ class TradingDates:
         self.lock.release_read()
 
         if target_date is None:
+            if Config.DEBUG:
+                return self.get_next_n_trading_date(
+                    tdate - dt.timedelta(days=1), days=days
+                )
+
             raise Exception(f"{tdate} not in trading dates or days out of range")
-        
+
         return target_date

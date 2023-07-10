@@ -53,12 +53,17 @@ class ExitHandler:
         self.trading_dates = trading_dates
         self.running_signals: DefaultDict[int, List[str]] = defaultdict(list)
         self.checkpoints_path = f"{Config.CHECKPOINTS_DIR}/exit_handler.json"
-        self.running_signals.update(load_checkpoints(self.checkpoints_path))
+        self.load_checkpoints()
         self.quote_delay_tolerance = Config.QUOTE_DELAY_TOLERANCE
 
     def reset(self):
         self.running_signals.clear()
         dump_checkpoints(self.checkpoints_path, self.running_signals)
+
+    def load_checkpoints(self):
+        data = load_checkpoints(self.checkpoints_path)
+        for key, val in data.items():
+            self.running_signals[int(key)] = val
 
     def send_exit_signal(self, position: Position, exit_type: ExitType):
         signal = Signal(
@@ -118,7 +123,7 @@ class ExitHandler:
                     self.send_exit_signal(position, ExitType.ExitByDaysProfitLimit)
             else:
                 if (
-                    position.avg_prc / snapshot.close - 1
+                    1 - snapshot.close / position.avg_prc
                     <= strategy.exit_dp_profit_limit
                 ):
                     self.send_exit_signal(position, ExitType.ExitByDaysProfitLimit)
@@ -135,7 +140,7 @@ class ExitHandler:
             if snapshot.close / position.avg_prc - 1 >= strategy.exit_take_profit:
                 self.send_exit_signal(position, ExitType.ExitByTakeProfit)
         else:
-            if position.avg_prc / snapshot.close - 1 >= strategy.exit_take_profit:
+            if 1 - snapshot.close / position.avg_prc >= strategy.exit_take_profit:
                 self.send_exit_signal(position, ExitType.ExitByTakeProfit)
 
     def exit_by_stop_loss(
@@ -150,8 +155,40 @@ class ExitHandler:
             if snapshot.close / position.avg_prc - 1 <= strategy.exit_stop_loss:
                 self.send_exit_signal(position, ExitType.ExitByStopLoss)
         else:
-            if position.avg_prc / snapshot.close - 1 <= strategy.exit_stop_loss:
+            if 1 - snapshot.close / position.avg_prc <= strategy.exit_stop_loss:
                 self.send_exit_signal(position, ExitType.ExitByStopLoss)
+
+    def exit_by_profit_pullback(
+        self, strategy: Strategy, position: Position, snapshot: QuoteSnapshot
+    ):
+        if self.is_running_signal(strategy.id, position.code):
+            return
+        if (
+            strategy.exit_profit_pullback_ratio is None
+            or strategy.exit_profit_pullback_threshold is None
+        ):
+            return
+
+        if position.action == Action.Buy:
+            high = max(snapshot.high, position.high_since_entry)
+            max_profit_range = high / position.avg_prc - 1
+            if max_profit_range >= strategy.exit_profit_pullback_threshold:
+                profit_range = snapshot.close / position.avg_prc - 1
+                if profit_range < 0 or (
+                    1 - profit_range / max_profit_range
+                    >= strategy.exit_profit_pullback_ratio
+                ):
+                    self.send_exit_signal(position, ExitType.ExitByProfitPullback)
+        else:
+            low = min(snapshot.low, position.low_since_entry)
+            max_profit_range = 1 - low / position.avg_prc
+            if max_profit_range >= strategy.exit_profit_pullback_threshold:
+                profit_range = 1 - snapshot.close / position.avg_prc
+                if profit_range < 0 or (
+                    1 - profit_range / max_profit_range
+                    >= strategy.exit_profit_pullback_ratio
+                ):
+                    self.send_exit_signal(position, ExitType.ExitByProfitPullback)
 
     def is_running_signal(self, strategy_id: int, code: str) -> bool:
         return (
@@ -174,6 +211,7 @@ class ExitHandler:
                 continue
             strategy = self.strategies.get_strategy(strategy_id)
             position = self.positions.get_position(strategy_id, code)
+            self.exit_by_profit_pullback(strategy, position, snapshot)
             self.exit_by_days_profit_limit(strategy, position, snapshot)
             self.exit_by_take_profit(strategy, position, snapshot)
             self.exit_by_stop_loss(strategy, position, snapshot)

@@ -25,6 +25,8 @@ def positions() -> Positions:
                 cost_amt=37200.0,
                 avg_prc=12.4,
                 first_entry_date=datetime.date(2023, 5, 25),
+                low_since_entry=12.4,
+                high_since_entry=12.4,
             ),
             "2882": Position(
                 strategy=1,
@@ -34,6 +36,8 @@ def positions() -> Positions:
                 cost_amt=522000.0,
                 avg_prc=43.5,
                 first_entry_date=datetime.date(2023, 5, 16),
+                low_since_entry=43.5,
+                high_since_entry=43.5,
             ),
             "3029": Position(
                 strategy=1,
@@ -43,6 +47,8 @@ def positions() -> Positions:
                 cost_amt=615000.0,
                 avg_prc=61.5,
                 first_entry_date=datetime.date(2023, 5, 15),
+                low_since_entry=61.5,
+                high_since_entry=61.5,
             ),
             "4129": Position(
                 strategy=1,
@@ -52,6 +58,8 @@ def positions() -> Positions:
                 cost_amt=499599.9999999999,
                 avg_prc=62.44999999999999,
                 first_entry_date=datetime.date(2023, 5, 26),
+                low_since_entry=62.5,
+                high_since_entry=62.5,
             ),
             "4958": Position(
                 strategy=1,
@@ -61,6 +69,8 @@ def positions() -> Positions:
                 cost_amt=227000.0,
                 avg_prc=113.5,
                 first_entry_date=datetime.date(2023, 5, 22),
+                low_since_entry=113.5,
+                high_since_entry=113.5,
             ),
             "6112": Position(
                 strategy=1,
@@ -70,6 +80,8 @@ def positions() -> Positions:
                 cost_amt=626000.0,
                 avg_prc=62.6,
                 first_entry_date=datetime.date(2023, 5, 15),
+                low_since_entry=62.6,
+                high_since_entry=62.6,
             ),
         },
         2: {
@@ -81,6 +93,8 @@ def positions() -> Positions:
                 cost_amt=148350.00000000003,
                 avg_prc=49.45000000000001,
                 first_entry_date=datetime.date(2023, 5, 18),
+                low_since_entry=49.45,
+                high_since_entry=49.45,
             ),
             "8446": Position(
                 strategy=2,
@@ -90,6 +104,8 @@ def positions() -> Positions:
                 cost_amt=228500.0,
                 avg_prc=114.25,
                 first_entry_date=datetime.date(2023, 5, 18),
+                low_since_entry=114.25,
+                high_since_entry=114.25,
             ),
         },
         6: {
@@ -101,6 +117,8 @@ def positions() -> Positions:
                 cost_amt=239399.99999999997,
                 avg_prc=79.8,
                 first_entry_date=datetime.date(2023, 5, 22),
+                low_since_entry=79.8,
+                high_since_entry=79.8,
             )
         },
     }

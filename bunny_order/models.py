@@ -38,6 +38,7 @@ class ExitType(str, Enum):
     ExitByDaysProfitLimit = "ExitByDaysProfitLimit"
     ExitByTakeProfit = "ExitByTakeProfit"
     ExitByStopLoss = "ExitByStopLoss"
+    ExitByProfitPullback = "ExitByProfitPullback"
 
 
 class RMRejectReason(str, Enum):
@@ -77,6 +78,8 @@ class Strategy(BaseModel):
     exit_take_profit: Optional[float]
     exit_dp_days: Optional[int]
     exit_dp_profit_limit: Optional[float]
+    exit_profit_pullback_threshold: Optional[float]
+    exit_profit_pullback_ratio: Optional[float]
 
 
 class Signal(BaseModel):
@@ -152,6 +155,8 @@ class Position(BaseModel):
     cost_amt: float
     avg_prc: float
     first_entry_date: dt.date
+    low_since_entry: float
+    high_since_entry: float
 
 
 class QuoteSnapshot(BaseModel):

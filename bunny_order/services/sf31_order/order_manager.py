@@ -135,7 +135,6 @@ class OrderEventHandler(FileEventHandler):
         if os.path.exists(self.checkpoints_path):
             with open(self.checkpoints_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            logger.warning(self.checkpoints)
             for key0, val0 in data.items():
                 for key1, val1 in val0.items():
                     self.checkpoints[key0][key1] = val1

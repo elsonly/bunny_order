@@ -118,7 +118,7 @@ class ExitHandler:
                     self.send_exit_signal(position, ExitType.ExitByDaysProfitLimit)
             else:
                 if (
-                    position.avg_prc / snapshot.close - 1
+                    1 - snapshot.close / position.avg_prc
                     <= strategy.exit_dp_profit_limit
                 ):
                     self.send_exit_signal(position, ExitType.ExitByDaysProfitLimit)
@@ -135,7 +135,7 @@ class ExitHandler:
             if snapshot.close / position.avg_prc - 1 >= strategy.exit_take_profit:
                 self.send_exit_signal(position, ExitType.ExitByTakeProfit)
         else:
-            if position.avg_prc / snapshot.close - 1 >= strategy.exit_take_profit:
+            if 1 - snapshot.close / position.avg_prc >= strategy.exit_take_profit:
                 self.send_exit_signal(position, ExitType.ExitByTakeProfit)
 
     def exit_by_stop_loss(
@@ -150,8 +150,40 @@ class ExitHandler:
             if snapshot.close / position.avg_prc - 1 <= strategy.exit_stop_loss:
                 self.send_exit_signal(position, ExitType.ExitByStopLoss)
         else:
-            if position.avg_prc / snapshot.close - 1 <= strategy.exit_stop_loss:
+            if 1 - snapshot.close / position.avg_prc <= strategy.exit_stop_loss:
                 self.send_exit_signal(position, ExitType.ExitByStopLoss)
+
+    def exit_by_profit_pullback(
+        self, strategy: Strategy, position: Position, snapshot: QuoteSnapshot
+    ):
+        if self.is_running_signal(strategy.id, position.code):
+            return
+        if (
+            strategy.exit_profit_pullback_ratio is None
+            or strategy.exit_profit_pullback_threshold is None
+        ):
+            return
+
+        if position.action == Action.Buy:
+            high = max(snapshot.high, position.high_since_entry)
+            max_profit_range = high / position.avg_prc - 1
+            if max_profit_range >= strategy.exit_profit_pullback_threshold:
+                profit_range = snapshot.close / position.avg_prc - 1
+                if profit_range < 0 or (
+                    1 - profit_range / max_profit_range
+                    >= strategy.exit_profit_pullback_ratio
+                ):
+                    self.send_exit_signal(position, ExitType.ExitByProfitPullback)
+        else:
+            low = min(snapshot.low, position.low_since_entry)
+            max_profit_range = 1 - low / position.avg_prc
+            if max_profit_range >= strategy.exit_profit_pullback_threshold:
+                profit_range = 1 - snapshot.close / position.avg_prc
+                if profit_range < 0 or (
+                    1 - profit_range / max_profit_range
+                    >= strategy.exit_profit_pullback_ratio
+                ):
+                    self.send_exit_signal(position, ExitType.ExitByProfitPullback)
 
     def is_running_signal(self, strategy_id: int, code: str) -> bool:
         return (

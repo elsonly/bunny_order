@@ -287,11 +287,7 @@ class DataManager:
 
     def get_positions(self) -> Dict[int, Dict[str, Position]]:
         data = self.cli.execute_query(
-            """select 
-                strategy, code, action, qty, 
-                cost_amt, avg_prc, first_entry_date
-            from dealer.ft_get_positions_fifo(CURRENT_DATE, 'B')
-            """,
+            """select * from dealer.ft_get_positions_order_manager();""",
             "dict",
         )
         d = {}

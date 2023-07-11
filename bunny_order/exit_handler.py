@@ -170,7 +170,10 @@ class ExitHandler:
             return
 
         if position.action == Action.Buy:
-            high = max(snapshot.high, position.high_since_entry)
+            if position.high_since_entry is None:
+                high = snapshot.high
+            else:
+                high = max(snapshot.high, position.high_since_entry)
             max_profit_range = high / position.avg_prc - 1
             if max_profit_range >= strategy.exit_profit_pullback_threshold:
                 profit_range = snapshot.close / position.avg_prc - 1
@@ -180,7 +183,10 @@ class ExitHandler:
                 ):
                     self.send_exit_signal(position, ExitType.ExitByProfitPullback)
         else:
-            low = min(snapshot.low, position.low_since_entry)
+            if position.low_since_entry is None:
+                low = snapshot.low
+            else:
+                low = min(snapshot.low, position.low_since_entry)
             max_profit_range = 1 - low / position.avg_prc
             if max_profit_range >= strategy.exit_profit_pullback_threshold:
                 profit_range = 1 - snapshot.close / position.avg_prc

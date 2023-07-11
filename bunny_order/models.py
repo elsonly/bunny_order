@@ -155,8 +155,8 @@ class Position(BaseModel):
     cost_amt: float
     avg_prc: float
     first_entry_date: dt.date
-    low_since_entry: float
-    high_since_entry: float
+    low_since_entry: Optional[float]
+    high_since_entry: Optional[float]
 
 
 class QuoteSnapshot(BaseModel):
